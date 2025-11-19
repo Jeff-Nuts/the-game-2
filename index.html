@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Neon Square - Dash Update</title>
+    <title>Neon Square - UI Polish</title>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       body {
@@ -39,8 +39,8 @@
           WALL_SLIDE_SPEED: 2,
           TERMINAL_VELOCITY: 15,
           DASH_SPEED: 18,
-          DASH_DURATION: 8, // Frames
-          DASH_REGEN_TIME: 30 // Frames (1 second)
+          DASH_DURATION: 8,
+          DASH_REGEN_TIME: 30 // CHANGED: From 60 to 30 (0.5 seconds)
         };
 
         static COLORS = {
@@ -51,7 +51,7 @@
           ENEMY_EYES: '#330000',
           WALL: '#1e1e24',
           WALL_GLOW: 'rgba(0, 0, 0, 0)',
-          UI_BG: 'rgba(0, 0, 0, 0.6)', // Semi-transparent
+          UI_BG: 'rgba(0, 0, 0, 0.6)',
           UI_BORDER: 'rgba(255, 255, 255, 0.3)',
           TEXT_HINT: '#aaa',
           DASH_ACTIVE: '#00f3ff',
@@ -190,15 +190,13 @@
         emitDust(x, y) { for (let i = 0; i < 4; i++) this.particles.push(new Particle(x, y, 'dust', '#888')); }
         emitExplosion(x, y, color) { for (let i = 0; i < 12; i++) this.particles.push(new Particle(x, y, 'spark', color)); }
         emitTrail(x, y, color, size) {
-           // Determine frequency based on type implicitly by calls, or random check
            if (Math.random() > 0.3) { 
             this.particles.push(new Particle(x, y, 'trail', color, size));
            }
         }
-        // Specific helper for dashing ghost effect
         emitGhost(x, y, width, height, color) {
            const p = new Particle(x + width/2, y + height/2, 'trail', color, width);
-           p.decay = 0.15; // Fade faster
+           p.decay = 0.15; 
            this.particles.push(p);
         }
       }
@@ -217,7 +215,7 @@
           this.onGround = false;
           this.onWall = false;
           this.scaleX = 1; this.scaleY = 1;
-          this.facing = 'right'; // New: track direction
+          this.facing = 'right';
         }
 
         updatePhysics(level, context) {
@@ -282,22 +280,15 @@
           super(50, 200, 24, 24, Config.COLORS.PLAYER);
           this.speed = 4;
           this.jumpPower = -11;
-          
-          // Wall Jump Stats
           this.wallJumpsMax = 3;
           this.wallJumps = 3;
-          
-          // Health Stats
           this.health = 100;
           this.maxHealth = 100;
-          
-          // Dash Stats
           this.dashes = 3;
           this.maxDashes = 3;
           this.dashCooldownTimer = 0;
           this.isDashing = false;
           this.dashFrameTimer = 0;
-          
           this.lastShotTime = 0;
           this.shootCooldown = 120;
         }
@@ -305,7 +296,6 @@
         update(context) {
           const input = context.input;
           
-          // 1. Dash Regeneration
           if (this.dashes < this.maxDashes) {
             this.dashCooldownTimer++;
             if (this.dashCooldownTimer >= Config.PHYSICS.DASH_REGEN_TIME) {
@@ -314,53 +304,43 @@
             }
           }
 
-          // 2. Dash Activation
           if (input.isPressed('shift') && this.dashes > 0 && !this.isDashing) {
             this.isDashing = true;
             this.dashes--;
             this.dashFrameTimer = Config.PHYSICS.DASH_DURATION;
-            this.dashCooldownTimer = 0; // Reset regen on use
-            
-            // Dash towards facing direction
+            this.dashCooldownTimer = 0;
             this.dx = (this.facing === 'left' ? -1 : 1) * Config.PHYSICS.DASH_SPEED;
-            this.dy = 0; // Counteract gravity immediately
+            this.dy = 0; 
             context.camera.shake(4);
-            // Visual: Trail
             context.particles.emitGhost(this.x, this.y, this.width, this.height, Config.COLORS.DASH_ACTIVE);
           }
 
-          // 3. Movement Logic
           if (this.isDashing) {
-            // DASH PHYSICS
             this.dashFrameTimer--;
-            this.dy = 0; // No Gravity during dash
-            // Keep dx constant
+            this.dy = 0; 
             this.dx = (this.facing === 'left' ? -1 : 1) * Config.PHYSICS.DASH_SPEED;
             
-            // Emit ghost particles
             if(this.dashFrameTimer % 2 === 0) {
                 context.particles.emitGhost(this.x, this.y, this.width, this.height, 'rgba(255, 255, 255, 0.5)');
             }
 
             if (this.dashFrameTimer <= 0) {
               this.isDashing = false;
-              this.dx *= 0.5; // Slow down after dash
+              this.dx *= 0.5; 
             }
             
-            // Collision check specific for dash (simplified)
             let nextX = this.x + this.dx;
             for (const plat of context.level.platforms) {
                if (Utils.checkAABB({x: nextX, y: this.y, width: this.width, height: this.height}, plat)) {
                   this.isDashing = false;
                   this.dx = 0;
-                  nextX = this.x; // Stop
+                  nextX = this.x; 
                   break;
                }
             }
             this.x = nextX;
 
           } else {
-            // NORMAL PHYSICS
             if (input.isDown('a')) {
                 this.dx = -this.speed;
                 this.facing = 'left';
@@ -381,7 +361,6 @@
             this.updatePhysics(context.level, context);
           }
 
-          // 4. Combat
           if (input.mouse.down) {
             const now = Date.now();
             if (now - this.lastShotTime > this.shootCooldown) {
@@ -390,7 +369,6 @@
             }
           }
 
-          // 5. Bounds
           if (this.x < 0) this.x = 0;
           if (this.x > 800 - this.width) this.x = 800 - this.width;
           if (this.y > 500) this.health = 0; 
@@ -402,7 +380,7 @@
           if (isWall) {
             this.dx = this.onWall === 'left' ? 6 : -6;
             this.wallJumps--;
-            this.facing = this.onWall === 'left' ? 'right' : 'left'; // Face away from wall
+            this.facing = this.onWall === 'left' ? 'right' : 'left'; 
             context.particles.emitDust(this.onWall === 'left' ? this.x : this.x + this.width, this.y + this.height/2);
           } else {
             context.particles.emitDust(this.x + this.width/2, this.y + this.height);
@@ -433,7 +411,7 @@
           ctx.scale(this.scaleX, this.scaleY);
           ctx.translate(-cx, -cy);
 
-          ctx.fillStyle = this.isDashing ? '#fff' : this.color; // Flash white when dashing
+          ctx.fillStyle = this.isDashing ? '#fff' : this.color; 
           ctx.shadowBlur = 6;
           ctx.shadowColor = this.color;
           ctx.fillRect(this.x, this.y, this.width, this.height);
@@ -645,7 +623,7 @@
           
           // Panel Config
           const panelW = 220;
-          const panelH = 90;
+          const panelH = 110; // Increased Height for Padding
           const margin = 20;
           const startX = this.canvas.width - panelW - margin;
           const startY = margin;
@@ -653,7 +631,6 @@
           // Draw Panel Background
           this.ctx.fillStyle = Config.COLORS.UI_BG;
           this.ctx.beginPath();
-          // Modern round rect
           if (this.ctx.roundRect) this.ctx.roundRect(startX, startY, panelW, panelH, 10);
           else this.ctx.fillRect(startX, startY, panelW, panelH);
           this.ctx.fill();
@@ -663,44 +640,47 @@
           this.ctx.lineWidth = 1;
           this.ctx.stroke();
 
+          // Calculate inner content positions with more padding from top
+          const contentStartX = startX + 15;
+          const contentStartY = startY + 25; // Added top padding (text starts here)
+
           // 1. Health Bar
           const hpPct = Math.max(0, p.health / p.maxHealth);
-          const barX = startX + 15;
-          const barY = startY + 15;
           const barW = panelW - 30;
           const barH = 12;
-
-          this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
-          this.ctx.fillRect(barX, barY, barW, barH);
           
-          this.ctx.fillStyle = hpPct > 0.3 ? Config.COLORS.PLAYER : 'red';
-          this.ctx.fillRect(barX, barY, barW * hpPct, barH);
-          
+          // HP Label
           this.ctx.fillStyle = '#fff';
           this.ctx.font = 'bold 12px sans-serif';
-          this.ctx.fillText('HP', barX - 2, barY - 4);
+          this.ctx.fillText('HP', contentStartX - 2, contentStartY - 6);
+
+          // HP Bar Rect
+          this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
+          this.ctx.fillRect(contentStartX, contentStartY, barW, barH);
+          
+          this.ctx.fillStyle = hpPct > 0.3 ? Config.COLORS.PLAYER : 'red';
+          this.ctx.fillRect(contentStartX, contentStartY, barW * hpPct, barH);
 
           // 2. Wall Jumps (Blocks)
-          const row2Y = barY + 30;
+          const row2Y = contentStartY + 30;
           this.ctx.fillStyle = '#fff';
           this.ctx.font = '12px sans-serif';
-          this.ctx.fillText('Wall Jumps:', barX, row2Y);
+          this.ctx.fillText('Wall Jumps:', contentStartX, row2Y);
           
           for(let i=0; i<p.wallJumpsMax; i++) {
             this.ctx.fillStyle = i < p.wallJumps ? Config.COLORS.PLAYER : Config.COLORS.DASH_EMPTY;
-            this.ctx.fillRect(barX + 80 + (i*20), row2Y - 10, 15, 10);
+            this.ctx.fillRect(contentStartX + 80 + (i*20), row2Y - 10, 15, 10);
           }
 
           // 3. Dashes (Blocks)
           const row3Y = row2Y + 25;
           this.ctx.fillStyle = '#fff';
-          this.ctx.fillText('Dashes:', barX, row3Y);
+          this.ctx.fillText('Dashes:', contentStartX, row3Y);
           
           for(let i=0; i<p.maxDashes; i++) {
             this.ctx.fillStyle = i < p.dashes ? Config.COLORS.DASH_ACTIVE : Config.COLORS.DASH_EMPTY;
-            // Draw diamond shape or Rect
             this.ctx.beginPath();
-            this.ctx.rect(barX + 80 + (i*20), row3Y - 10, 15, 10);
+            this.ctx.rect(contentStartX + 80 + (i*20), row3Y - 10, 15, 10);
             this.ctx.fill();
           }
         }
