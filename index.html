@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Neon Square - Refactored OOP</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        background: #050505;
+        overflow: hidden;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        color: #fff;
+        font-family: 'Segoe UI', sans-serif;
+      }
+      canvas {
+        display: block;
+        background: #0a0a10;
+        box-shadow: 0 0 50px rgba(0, 243, 255, 0.1);
+        cursor: none;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="game" width="800" height="450"></canvas>
+
+    <script>
+      /**
+       * =========================================
+       * CONFIGURATION & CONSTANTS
+       * Centralized source of truth for game tuning
+       * =========================================
+       */
+      class Config {
+        static PHYSICS = {
+          GRAVITY: 0.6,
+          FRICTION: 0.82,
+          WALL_SLIDE_SPEED: 2,
+          TERMINAL_VELOCITY: 15,
+        };
+
+        static COLORS = {
+          BG: '#0a0a10',
+          PLAYER: '#00f3ff',
+          PLAYER_EYES: '#000000',
+          ENEMY: '#ff0055',
+          ENEMY_EYES: '#330000',
+          WALL: '#1e1e24',
+          WALL_GLOW: 'rgba(30, 30, 40, 0.5)',
+          UI_BG: 'rgba(0,0,0,0.5)',
+          TEXT_HINT: '#aaa',
+        };
+
+        static SETTINGS = {
+          DEBUG_MODE: true,
+          SCREEN_SHAKE_MULTIPLIER: 1,
+        };
+      }
+
+      /**
+       * =========================================
+       * UTILITIES
+       * Static helper functions
+       * =========================================
+       */
+      class Utils {
+        static rand(min, max) {
+          return Math.random() * (max - min) + min;
+        }
+
+        static lerp(start, end, amt) {
+          return (1 - amt) * start + amt * end;
+        }
+
+        static checkAABB(rect1, rect2) {
+          return (
+            rect1.x < rect2.x + rect2.width &&
+            rect1.x + rect1.width > rect2.x &&
+            rect1.y < rect2.y + rect2.height &&
+            rect1.y + rect1.height > rect2.y
+          );
+        }
+
+        static getAngle(x1, y1, x2, y2) {
+          return Math.atan2(y2 - y1, x2 - x1);
+        }
+      }
+
+      /**
+       * =========================================
+       * INPUT SYSTEM
+       * =========================================
+       */
+      class InputHandler {
+        constructor(canvas) {
+          this.keys = {};
+          this.mouse = { x: 0, y: 0, down: false };
+          this.canvas = canvas;
+          this._bindEvents();
+        }
+
+        _bindEvents() {
+          window.addEventListener(
+            'keydown',
+            (e) => (this.keys[e.key.toLowerCase()] = true)
+          );
+          window.addEventListener(
+            'keyup',
+            (e) => (this.keys[e.key.toLowerCase()] = false)
+          );
+
+          this.canvas.addEventListener('mousemove', (e) => {
+            const rect = this.canvas.getBoundingClientRect();
+            this.mouse.x = e.clientX - rect.left;
+            this.mouse.y = e.clientY - rect.top;
+          });
+
+          this.canvas.addEventListener('mousedown', (e) => {
+            if (e.button === 0) this.mouse.down = true;
+          });
+          this.canvas.addEventListener('mouseup', (e) => {
+            if (e.button === 0) this.mouse.down = false;
+          });
+        }
+
+        isKeyDown(key) {
+          return !!this.keys[key];
+        }
+        consumeKey(key) {
+          if (this.keys[key]) {
+            this.keys[key] = false;
+            return true;
+          }
+          return false;
+        }
+      }
+
+      /**
+       * =========================================
+       * VISUAL FX & PARTICLES
+       * =========================================
+       */
+      class Particle {
+        constructor(x, y, type, color) {
+          this.x = x;
+          this.y = y;
+          this.type = type;
+          this.color = color;
+          this.life = 1.0;
+          this._initPhysics();
+        }
+
+        _initPhysics() {
+          const angle = Utils.rand(0, Math.PI * 2);
+          if (this.type === 'dust') {
+            this.dx = Math.cos(angle) * 0.5;
+            this.dy = -Utils.rand(0.5, 2);
+            this.decay = 0.04;
+            this.size = Utils.rand(2, 4);
+          } else if (this.type === 'spark') {
+            const speed = 3;
+            this.dx = Math.cos(angle) * speed;
+            this.dy = Math.sin(angle) * speed;
+            this.decay = 0.06;
+            this.size = Utils.rand(2, 5);
+          } else if (this.type === 'trail') {
+            this.dx = 0;
+            this.dy = 0;
+            this.decay = 0.15;
+            this.size = Utils.rand(2, 4); // Passed size logic handled in system usually, simplified here
+          }
+        }
+
+        update() {
+          this.x += this.dx;
+          this.y += this.dy;
+          this.life -= this.decay;
+
+          if (this.type === 'spark') {
+            this.dy += 0.2; // Gravity
+            this.dx *= 0.95; // Drag
+          }
+        }
+
+        draw(ctx) {
+          ctx.globalAlpha = Math.max(0, this.life);
+          ctx.fillStyle = this.color;
+          ctx.shadowBlur = this.type === 'spark' ? 10 : 0;
+          ctx.shadowColor = this.color;
+          ctx.fillRect(
+            this.x - this.size / 2,
+            this.y - this.size / 2,
+            this.size,
+            this.size
+          );
+          ctx.globalAlpha = 1.0;
+          ctx.shadowBlur = 0;
+        }
+      }
+
+      class ParticleSystem {
+        constructor() {
+          this.particles = [];
+        }
+
+        update() {
+          for (let i = this.particles.length - 1; i >= 0; i--) {
+            this.particles[i].update();
+            if (this.particles[i].life <= 0) {
+              this.particles.splice(i, 1);
+            }
+          }
+        }
+
+        draw(ctx) {
+          this.particles.forEach((p) => p.draw(ctx));
+        }
+
+        emitDust(x, y) {
+          for (let i = 0; i < 4; i++)
+            this.particles.push(new Particle(x, y, 'dust', '#888'));
+        }
+
+        emitExplosion(x, y, color) {
+          for (let i = 0; i < 12; i++)
+            this.particles.push(new Particle(x, y, 'spark', color));
+        }
+
+        emitTrail(x, y, color, size) {
+          if (Math.random() > 0.4) {
+            const p = new Particle(x, y, 'trail', color);
+            p.size = size;
+            this.particles.push(p);
+          }
+        }
+      }
+
+      /**
+       * =========================================
+       * GAME OBJECTS (ENTITIES)
+       * =========================================
+       */
+      class Entity {
+        constructor(x, y, w, h, color) {
+          this.x = x;
+          this.y = y;
+          this.width = w;
+          this.height = h;
+          this.color = color;
+          this.dx = 0;
+          this.dy = 0;
+          this.onGround = false;
+          this.onWall = false;
+          this.scaleX = 1;
+          this.scaleY = 1;
+          this.facing = 'right';
+        }
+
+        // Template method for updating physics
+        updatePhysics(level, context) {
+          // Squash & Stretch recovery
+          this.scaleX = Utils.lerp(this.scaleX, 1, 0.2);
+          this.scaleY = Utils.lerp(this.scaleY, 1, 0.2);
+
+          // Gravity
+          this.dy += Config.PHYSICS.GRAVITY;
+
+          // Wall Slide
+          if (this.onWall && this.dy > 0 && !this.onGround) {
+            this.dy = Config.PHYSICS.WALL_SLIDE_SPEED;
+          }
+
+          let nextX = this.x + this.dx;
+          let nextY = this.y + this.dy;
+
+          this.onGround = false;
+          this.onWall = false;
+
+          // Platform Collision
+          for (const plat of level.platforms) {
+            // Horizontal Check
+            if (
+              Utils.checkAABB(
+                { x: nextX, y: this.y, width: this.width, height: this.height },
+                plat
+              )
+            ) {
+              if (this.dx > 0) {
+                nextX = plat.x - this.width;
+                this.onWall = 'right';
+              } else if (this.dx < 0) {
+                nextX = plat.x + plat.width;
+                this.onWall = 'left';
+              }
+              this.dx = 0;
+            }
+
+            // Vertical Check
+            if (
+              Utils.checkAABB(
+                { x: nextX, y: nextY, width: this.width, height: this.height },
+                plat
+              )
+            ) {
+              if (this.dy > 0) {
+                nextY = plat.y - this.height;
+                this.onGround = true;
+                this._handleLanding(context);
+              } else if (this.dy < 0) {
+                nextY = plat.y + plat.height;
+              }
+              this.dy = 0;
+            }
+          }
+
+          this.x = nextX;
+          this.y = nextY;
+        }
+
+        _handleLanding(context) {
+          if (this.dy > 2) {
+            this.scaleX = 1.4;
+            this.scaleY = 0.6;
+            context.particles.emitDust(
+              this.x + this.width / 2,
+              this.y + this.height
+            );
+          }
+        }
+
+        drawEyes(ctx, targetX, targetY, color) {
+          const eyeSize = 4;
+          const eyeSpacing = 6;
+          const faceCenterX = this.x + this.width / 2;
+          const faceCenterY = this.y + this.height / 3;
+
+          // Calculate look vector
+          const lookX = targetX - faceCenterX;
+          const lookY = targetY - faceCenterY;
+          const maxMove = 3;
+          const dist = Math.sqrt(lookX * lookX + lookY * lookY) || 1;
+          const moveX = (lookX / dist) * maxMove;
+          const moveY = (lookY / dist) * maxMove;
+
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = color;
+          // Left Eye
+          ctx.fillRect(
+            faceCenterX - eyeSpacing + moveX - eyeSize / 2,
+            faceCenterY + moveY - eyeSize / 2,
+            eyeSize,
+            eyeSize
+          );
+          // Right Eye
+          ctx.fillRect(
+            faceCenterX + eyeSpacing + moveX - eyeSize / 2,
+            faceCenterY + moveY - eyeSize / 2,
+            eyeSize,
+            eyeSize
+          );
+        }
+      }
+
+      class Player extends Entity {
+        constructor() {
+          super(50, 200, 24, 24, Config.COLORS.PLAYER);
+          this.speed = 4;
+          this.jumpPower = -11;
+          this.wallJumpsMax = 3;
+          this.wallJumps = 3;
+          this.health = 100;
+          this.maxHealth = 100;
+          this.lastShotTime = 0;
+          this.shootCooldown = 120;
+        }
+
+        update(context) {
+          const input = context.input;
+
+          // Movement
+          if (input.isKeyDown('a')) this.dx = -this.speed;
+          else if (input.isKeyDown('d')) this.dx = this.speed;
+          else this.dx *= Config.PHYSICS.FRICTION;
+
+          // Jump
+          if (input.consumeKey('w')) {
+            if (this.onGround) {
+              this._jump(context, false);
+            } else if (this.onWall && this.wallJumps > 0) {
+              this._jump(context, true);
+            }
+          }
+
+          if (this.onGround) this.wallJumps = this.wallJumpsMax;
+
+          // Shooting
+          if (input.mouse.down) {
+            const now = Date.now();
+            if (now - this.lastShotTime > this.shootCooldown) {
+              this._shoot(context);
+              this.lastShotTime = now;
+            }
+          }
+
+          this.updatePhysics(context.level, context);
+          this._checkBounds(context);
+        }
+
+        _jump(context, isWall) {
+          this.dy = this.jumpPower;
+          this.scaleX = 0.6;
+          this.scaleY = 1.4;
+          if (isWall) {
+            this.dx = this.onWall === 'left' ? 6 : -6;
+            this.wallJumps--;
+            context.particles.emitDust(
+              this.onWall === 'left' ? this.x : this.x + this.width,
+              this.y + this.height / 2
+            );
+          } else {
+            context.particles.emitDust(
+              this.x + this.width / 2,
+              this.y + this.height
+            );
+          }
+        }
+
+        _shoot(context) {
+          const cx = this.x + this.width / 2;
+          const cy = this.y + this.height / 2;
+          const angle = Utils.getAngle(
+            cx,
+            cy,
+            context.input.mouse.x,
+            context.input.mouse.y
+          );
+          const speed = 12;
+
+          context.bullets.push({
+            x: cx,
+            y: cy,
+            dx: Math.cos(angle) * speed,
+            dy: Math.sin(angle) * speed,
+            isPlayer: true,
+            radius: 3,
+          });
+
+          context.camera.shake(2);
+          context.particles.emitExplosion(
+            cx + Math.cos(angle) * 15,
+            cy + Math.sin(angle) * 15,
+            '#fff'
+          );
+        }
+
+        _checkBounds(context) {
+          if (this.x < 0) this.x = 0;
+          if (this.x > 800 - this.width) this.x = 800 - this.width;
+          if (this.y > 500) this.health = 0;
+        }
+
+        draw(ctx, mouse) {
+          ctx.save();
+          const cx = this.x + this.width / 2;
+          const cy = this.y + this.height;
+          ctx.translate(cx, cy);
+          ctx.scale(this.scaleX, this.scaleY);
+          ctx.translate(-cx, -cy);
+
+          ctx.fillStyle = this.color;
+          ctx.shadowBlur = 15;
+          ctx.shadowColor = this.color;
+          ctx.fillRect(this.x, this.y, this.width, this.height);
+
+          this.drawEyes(ctx, mouse.x, mouse.y, Config.COLORS.PLAYER_EYES);
+
+          ctx.restore();
+        }
+      }
+
+      class Enemy extends Entity {
+        constructor(x, y) {
+          super(x, y, 24, 24, Config.COLORS.ENEMY);
+          this.health = 100;
+          this.maxHealth = 100;
+          this.hitFlashTimer = 0;
+        }
+
+        update(context, player) {
+          // AI DISABLED: Just physics and friction
+          this.dx *= Config.PHYSICS.FRICTION;
+          this.updatePhysics(context.level, context);
+        }
+
+        takeDamage(amount) {
+          this.health -= amount;
+          this.hitFlashTimer = 5;
+        }
+
+        draw(ctx, player) {
+          // Hit Flash
+          ctx.fillStyle = this.hitFlashTimer > 0 ? '#fff' : this.color;
+          if (this.hitFlashTimer > 0) this.hitFlashTimer--;
+
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = this.color;
+          ctx.fillRect(this.x, this.y, this.width, this.height);
+
+          // Eyes follow player
+          const targetX = player.x + player.width / 2;
+          const targetY = player.y + player.height / 2;
+          this.drawEyes(ctx, targetX, targetY, Config.COLORS.ENEMY_EYES);
+
+          // Health Bar
+          const hpPct = Math.max(0, this.health / this.maxHealth);
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = '#333';
+          ctx.fillRect(this.x, this.y - 8, this.width, 3);
+          ctx.fillStyle = '#f00';
+          ctx.fillRect(this.x, this.y - 8, this.width * hpPct, 3);
+        }
+      }
+
+      /**
+       * =========================================
+       * LEVEL MANAGEMENT
+       * =========================================
+       */
+      class Level {
+        constructor() {
+          this.platforms = [
+            { x: 0, y: 400, width: 800, height: 50 }, // Floor
+            { x: 0, y: 0, width: 40, height: 450 }, // Left Wall
+            { x: 760, y: 0, width: 40, height: 450 }, // Right Wall
+            { x: 350, y: 320, width: 100, height: 80 },
+            { x: 380, y: 220, width: 40, height: 100 },
+            { x: 40, y: 300, width: 100, height: 20 },
+            { x: 140, y: 220, width: 20, height: 100 },
+            { x: 40, y: 150, width: 120, height: 20 },
+            { x: 600, y: 280, width: 160, height: 20 },
+            { x: 550, y: 180, width: 20, height: 120 },
+            { x: 620, y: 120, width: 140, height: 20 },
+            { x: 300, y: 100, width: 200, height: 20 },
+          ];
+        }
+
+        draw(ctx) {
+          ctx.beginPath();
+          for (const plat of this.platforms) {
+            ctx.rect(plat.x, plat.y, plat.width, plat.height);
+          }
+          ctx.fillStyle = Config.COLORS.WALL;
+          ctx.shadowColor = Config.COLORS.WALL_GLOW;
+          ctx.shadowBlur = 10;
+          ctx.fill();
+          ctx.shadowBlur = 0;
+        }
+      }
+
+      /**
+       * =========================================
+       * CORE GAME ENGINE
+       * =========================================
+       */
+      class Camera {
+        constructor() {
+          this.x = 0;
+          this.y = 0;
+          this.shakePower = 0;
+        }
+        shake(amount) {
+          this.shakePower = amount;
+        }
+        update() {
+          if (this.shakePower > 0) {
+            this.x = Utils.rand(-this.shakePower, this.shakePower);
+            this.y = Utils.rand(-this.shakePower, this.shakePower);
+            this.shakePower *= 0.9;
+            if (this.shakePower < 0.5) this.shakePower = 0;
+          } else {
+            this.x = 0;
+            this.y = 0;
+          }
+        }
+      }
+
+      class Game {
+        constructor() {
+          this.canvas = document.getElementById('game');
+          this.ctx = this.canvas.getContext('2d');
+
+          // Initialize Subsystems
+          this.input = new InputHandler(this.canvas);
+          this.camera = new Camera();
+          this.particles = new ParticleSystem();
+          this.level = new Level();
+
+          this.reset();
+
+          // Bind Loop
+          this.loop = this.loop.bind(this);
+          requestAnimationFrame(this.loop);
+        }
+
+        reset() {
+          this.player = new Player();
+          // Spawn single test dummy at bottom
+          this.enemies = [new Enemy(600, 370)];
+          this.bullets = [];
+        }
+
+        get context() {
+          return {
+            input: this.input,
+            camera: this.camera,
+            particles: this.particles,
+            level: this.level,
+            bullets: this.bullets,
+          };
+        }
+
+        update() {
+          this.camera.update();
+          this.particles.update();
+
+          // Entity Updates
+          this.player.update(this.context);
+          this.enemies.forEach((e) => e.update(this.context, this.player));
+
+          // Bullet Logic
+          this.updateBullets();
+        }
+
+        updateBullets() {
+          for (let i = this.bullets.length - 1; i >= 0; i--) {
+            let b = this.bullets[i];
+            b.x += b.dx;
+            b.y += b.dy;
+
+            // Trail Effect
+            this.particles.emitTrail(
+              b.x,
+              b.y,
+              b.isPlayer ? Config.COLORS.PLAYER : Config.COLORS.ENEMY,
+              b.radius
+            );
+
+            // Bounds
+            if (b.x < 0 || b.x > 800 || b.y < 0 || b.y > 450) {
+              this.bullets.splice(i, 1);
+              continue;
+            }
+
+            // Wall Collisions
+            let hitPlat = false;
+            for (let plat of this.level.platforms) {
+              if (
+                Utils.checkAABB(
+                  {
+                    x: b.x - b.radius,
+                    y: b.y - b.radius,
+                    width: b.radius * 2,
+                    height: b.radius * 2,
+                  },
+                  plat
+                )
+              ) {
+                hitPlat = true;
+                this.particles.emitExplosion(b.x, b.y, '#ccc');
+                break;
+              }
+            }
+            if (hitPlat) {
+              this.bullets.splice(i, 1);
+              continue;
+            }
+
+            // Player Bullet vs Enemy
+            if (b.isPlayer) {
+              for (let j = this.enemies.length - 1; j >= 0; j--) {
+                let e = this.enemies[j];
+                if (
+                  Utils.checkAABB(
+                    { x: b.x, y: b.y, width: b.radius, height: b.radius },
+                    e
+                  )
+                ) {
+                  e.takeDamage(20);
+                  this.particles.emitExplosion(b.x, b.y, Config.COLORS.ENEMY);
+                  this.bullets.splice(i, 1);
+
+                  if (e.health <= 0) {
+                    this.particles.emitExplosion(
+                      e.x + 12,
+                      e.y + 12,
+                      Config.COLORS.ENEMY
+                    );
+                    // Keep dummy alive for testing purposes
+                    e.health = e.maxHealth;
+                  }
+                  break;
+                }
+              }
+            }
+          }
+        }
+
+        draw() {
+          // Background
+          this.ctx.fillStyle = Config.COLORS.BG;
+          this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+          this.ctx.save();
+          this.ctx.translate(this.camera.x, this.camera.y);
+
+          // Game World
+          this.level.draw(this.ctx);
+          this.particles.draw(this.ctx);
+          this.enemies.forEach((e) => e.draw(this.ctx, this.player));
+          this.player.draw(this.ctx, this.input.mouse);
+          this._drawBullets();
+          this._drawCursor();
+
+          this.ctx.restore();
+
+          // UI
+          this._drawUI();
+        }
+
+        _drawBullets() {
+          for (let b of this.bullets) {
+            this.ctx.fillStyle = b.isPlayer ? '#fff' : '#ffaaaa';
+            this.ctx.shadowBlur = 8;
+            this.ctx.shadowColor = b.isPlayer
+              ? Config.COLORS.PLAYER
+              : Config.COLORS.ENEMY;
+            this.ctx.beginPath();
+            this.ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+            this.ctx.fill();
+          }
+        }
+
+        _drawCursor() {
+          this.ctx.shadowBlur = 4;
+          this.ctx.shadowColor = '#fff';
+          this.ctx.strokeStyle = '#fff';
+          this.ctx.lineWidth = 1;
+          const mx = this.input.mouse.x;
+          const my = this.input.mouse.y;
+          this.ctx.strokeRect(mx - 6, my - 6, 12, 12);
+          this.ctx.beginPath();
+          this.ctx.moveTo(mx, my - 2);
+          this.ctx.lineTo(mx, my + 2);
+          this.ctx.moveTo(mx - 2, my);
+          this.ctx.lineTo(mx + 2, my);
+          this.ctx.stroke();
+        }
+
+        _drawUI() {
+          const hpPct = Math.max(0, this.player.health / this.player.maxHealth);
+
+          // Bar Bg
+          this.ctx.fillStyle = Config.COLORS.UI_BG;
+          this.ctx.fillRect(20, 20, 200, 16);
+
+          // Bar Fill
+          this.ctx.fillStyle = hpPct > 0.3 ? Config.COLORS.PLAYER : 'red';
+          this.ctx.fillRect(20, 20, 200 * hpPct, 16);
+
+          // Border
+          this.ctx.lineWidth = 2;
+          this.ctx.strokeStyle = '#fff';
+          this.ctx.strokeRect(20, 20, 200, 16);
+
+          // Hint
+          this.ctx.fillStyle = Config.COLORS.TEXT_HINT;
+          this.ctx.font = '12px sans-serif';
+          this.ctx.fillText('TEST MODE: Dummy Target Active', 20, 50);
+        }
+
+        loop() {
+          this.update();
+          this.draw();
+          requestAnimationFrame(this.loop);
+        }
+      }
+
+      // Start
+      const game = new Game();
+    </script>
+  </body>
+</html>
+d
