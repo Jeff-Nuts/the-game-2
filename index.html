@@ -189,29 +189,43 @@
     <script>
       // ================== CONFIGURATION ==================
       class Config {
-        static PHYSICS = {
-          GRAVITY: 0.6, 
-          FRICTION: 0.82, 
-          WALL_SLIDE_SPEED: 2,
-          TERMINAL_VELOCITY: 15, 
-          DASH_SPEED: 18, 
-          DASH_DURATION: 8, 
-          DASH_REGEN_TIME: 30,
-          JUMP_CUTOFF: 0.45
-        };
-        
-        static WORLD = {
-          WIDTH: 2000,
-          HEIGHT: 1200
-        };
+  static PHYSICS = {
+    GRAVITY: 0.6, 
+    
+    // MOVEMENT
+    RUN_SPEED: 5,      // Normal walking speed
+    ACCEL: 1.5,        // How fast we get to run speed
+    
+    // MOMENTUM
+    GROUND_FRICTION: 0.8,  // Slows you down quickly on ground
+    AIR_RESISTANCE: 0.98,  // Preserves momentum in air (Super Dash)
+    
+    // WALL
+    WALL_SLIDE_SPEED: 2,
+    TERMINAL_VELOCITY: 18, 
+    
+    // DASH
+    DASH_SPEED: 20,    // High burst
+    DASH_DURATION: 10, // Slightly longer to feel the weight
+    DASH_REGEN_TIME: 30,
+    
+    // JUMP
+    JUMP_POWER: -13,
+    JUMP_CUTOFF: 0.5   // Variable jump height factor
+  };
+  
+  static WORLD = {
+    WIDTH: 2000,
+    HEIGHT: 1200
+  };
 
-        static COLORS = {
-          PLAYER: '#FFFF00', PLAYER_EYES: '#000000',
-          ENEMY: '#ff0055', ENEMY_EYES: '#330000',
-          WALL: '#1e1e24', WALL_GLOW: 'rgba(0, 0, 0, 0)',
-          DASH_ACTIVE: '#00f3ff'
-        };
-      }
+  static COLORS = {
+    PLAYER: '#FFFF00', PLAYER_EYES: '#000000',
+    ENEMY: '#ff0055', ENEMY_EYES: '#330000',
+    WALL: '#1e1e24', WALL_GLOW: 'rgba(0, 0, 0, 0)',
+    DASH_ACTIVE: '#00f3ff'
+  };
+}
 
       // ================== UTILITIES ==================
       class Utils {
@@ -388,187 +402,230 @@
       }
 
       class Player extends Entity {
-        constructor() {
-          super(100, 900, 24, 24, Config.COLORS.PLAYER);
-          this.speed = 4; 
-          this.jumpPower = -13; 
-          this.wallJumpsMax = 3; this.wallJumps = 3;
-          this.health = 100; this.maxHealth = 100;
-          this.dashes = 3; this.maxDashes = 3;
-          this.dashCooldownTimer = 0; this.isDashing = false; this.dashFrameTimer = 0;
-          this.lastShotTime = 0; this.shootCooldown = 120;
-          this.dashDir = { x: 0, y: 0 }; // Store Dash Vector
-        }
+  constructor() {
+    super(100, 900, 24, 24, Config.COLORS.PLAYER);
+    
+    // Use Config.PHYSICS.RUN_SPEED instead of hardcoded speed
+    this.wallJumpsMax = 3; this.wallJumps = 3;
+    this.health = 100; this.maxHealth = 100;
+    this.dashes = 3; this.maxDashes = 3;
+    this.dashCooldownTimer = 0; 
+    this.isDashing = false; 
+    this.dashFrameTimer = 0;
+    this.lastShotTime = 0; this.shootCooldown = 120;
+    this.dashDir = { x: 0, y: 0 };
+  }
 
-        update(context) {
-          const input = context.input;
-          
-          // Cut jump if key released
-          if (!input.isDown('w') && this.dy < -3) { 
-             this.dy *= Config.PHYSICS.JUMP_CUTOFF; 
-          }
+  update(context) {
+    const input = context.input;
+    const P = Config.PHYSICS;
 
-          // Regen
-          if (this.dashes < this.maxDashes) {
-            this.dashCooldownTimer++; 
-            if (this.dashCooldownTimer >= Config.PHYSICS.DASH_REGEN_TIME) { 
-               this.dashes++; 
-               this.dashCooldownTimer = 0; 
-            }
-          }
+    // 1. VARIABLE JUMP HEIGHT (Cut velocity if button released)
+    if (!input.isDown('w') && this.dy < -3 && !this.isDashing) { 
+       this.dy *= P.JUMP_CUTOFF; 
+    }
 
-          // --- 8-DIRECTIONAL DASH ACTIVATION ---
-          if (input.isPressed('shift') && this.dashes > 0 && !this.isDashing) {
-            this.isDashing = true; 
-            this.dashes--; 
-            this.dashFrameTimer = Config.PHYSICS.DASH_DURATION; 
-            this.dashCooldownTimer = 0;
-
-            // Calculate Direction based on held keys
-            let dx = 0;
-            let dy = 0;
-            if (input.isDown('w')) dy = -1;
-            if (input.isDown('s')) dy = 1;
-            if (input.isDown('a')) dx = -1;
-            if (input.isDown('d')) dx = 1;
-
-            // Default to facing if no keys held
-            if (dx === 0 && dy === 0) {
-               dx = this.facing === 'left' ? -1 : 1;
-            }
-
-            // Normalize diagonal speed
-            const length = Math.sqrt(dx * dx + dy * dy);
-            if (length !== 0) {
-               dx /= length;
-               dy /= length;
-            }
-
-            this.dashDir = { x: dx, y: dy };
-
-            // Apply immediate velocity
-            this.dx = this.dashDir.x * Config.PHYSICS.DASH_SPEED;
-            this.dy = this.dashDir.y * Config.PHYSICS.DASH_SPEED;
-            
-            context.camera.shake(4); 
-            context.particles.emitGhost(this.x, this.y, this.width, this.height, Config.COLORS.DASH_ACTIVE);
-          }
-
-          // --- DASH PHYSICS ---
-          if (this.isDashing) {
-            this.dashFrameTimer--; 
-            
-            // Force velocity along the calculated vector
-            this.dx = this.dashDir.x * Config.PHYSICS.DASH_SPEED;
-            this.dy = this.dashDir.y * Config.PHYSICS.DASH_SPEED;
-            
-            if(this.dashFrameTimer % 2 === 0) {
-                context.particles.emitGhost(this.x, this.y, this.width, this.height, 'rgba(255, 255, 255, 0.5)');
-            }
-
-            if (this.dashFrameTimer <= 0) { 
-                this.isDashing = false; 
-                this.dx *= 0.5; 
-                this.dy *= 0.5; // Dampen vertical momentum too
-            }
-            
-            let nextX = this.x + this.dx;
-            let nextY = this.y + this.dy; // Check vertical dash collision too
-            
-            // Simplified Dash Collision
-            for (const plat of context.level.platforms) {
-               if (Utils.checkAABB({x: nextX, y: nextY, width: this.width, height: this.height}, plat)) {
-                  this.isDashing = false; 
-                  this.dx = 0; 
-                  this.dy = 0;
-                  break; 
-               }
-            }
-            if(this.isDashing) {
-                this.x = nextX;
-                this.y = nextY;
-            }
-
-          } else {
-            // --- NORMAL MOVEMENT ---
-            if (input.isDown('a')) { 
-                this.dx = -this.speed; 
-                this.facing = 'left'; 
-            }
-            else if (input.isDown('d')) { 
-                this.dx = this.speed; 
-                this.facing = 'right'; 
-            }
-            else this.dx *= Config.PHYSICS.FRICTION;
-
-            if (this.onGround) {
-              if (input.isDown('w')) this._jump(context, false); 
-              this.wallJumps = this.wallJumpsMax;
-            } else if (this.onWall && this.wallJumps > 0) {
-              if (input.isPressed('w')) this._jump(context, true);
-            }
-
-            this.updatePhysics(context.level, context);
-          }
-
-          if (input.mouse.down) {
-            const now = Date.now();
-            if (now - this.lastShotTime > this.shootCooldown) {
-              this._shoot(context);
-              this.lastShotTime = now;
-            }
-          }
-
-          if (this.x < 0) this.x = 0;
-          if (this.x > Config.WORLD.WIDTH - this.width) this.x = Config.WORLD.WIDTH - this.width;
-          if (this.y > Config.WORLD.HEIGHT + 100) this.health = 0; 
-        }
-
-        _jump(context, isWall) {
-          this.dy = this.jumpPower; this.scaleX = 0.6; this.scaleY = 1.4;
-          if (isWall) {
-            this.dx = this.onWall === 'left' ? 6 : -6; this.wallJumps--; this.facing = this.onWall === 'left' ? 'right' : 'left'; 
-            context.particles.emitDust(this.onWall === 'left' ? this.x : this.x + this.width, this.y + this.height/2);
-          } else context.particles.emitDust(this.x + this.width/2, this.y + this.height);
-        }
-
-        _shoot(context) {
-          const cx = this.x + this.width / 2;
-          const cy = this.y + this.height / 2;
-          const worldMouseX = context.input.mouse.x + context.camera.x;
-          const worldMouseY = context.input.mouse.y + context.camera.y;
-          const angle = Utils.getAngle(cx, cy, worldMouseX, worldMouseY);
-          const speed = 12;
-          context.bullets.push({
-            x: cx, y: cy,
-            dx: Math.cos(angle) * speed,
-            dy: Math.sin(angle) * speed,
-            isPlayer: true,
-            radius: 3
-          });
-          context.camera.shake(2);
-          context.particles.emitExplosion(cx + Math.cos(angle)*15, cy + Math.sin(angle)*15, '#fff');
-        }
-
-        draw(ctx, mouse, camera) {
-          ctx.save();
-          const cx = this.x + this.width / 2;
-          const cy = this.y + this.height;
-          
-          ctx.translate(cx, cy);
-          ctx.scale(this.scaleX, this.scaleY);
-          ctx.translate(-cx, -cy);
-
-          ctx.fillStyle = this.isDashing ? '#fff' : this.color;
-          ctx.shadowBlur = 6;
-          ctx.shadowColor = this.color;
-          ctx.fillRect(this.x, this.y, this.width, this.height);
-          
-          this.drawEyes(ctx, mouse.x + camera.x, mouse.y + camera.y, Config.COLORS.PLAYER_EYES);
-          
-          ctx.restore();
-        }
+    // 2. DASH REGENERATION
+    if (this.dashes < this.maxDashes) {
+      this.dashCooldownTimer++; 
+      if (this.dashCooldownTimer >= P.DASH_REGEN_TIME) { 
+         this.dashes++; 
+         this.dashCooldownTimer = 0; 
       }
+    }
+
+    // 3. DASH ACTIVATION
+    if (input.isPressed('shift') && this.dashes > 0 && !this.isDashing) {
+      this.isDashing = true; 
+      this.dashes--; 
+      this.dashFrameTimer = P.DASH_DURATION; 
+      this.dashCooldownTimer = 0;
+
+      // Determine Direction
+      let dx = 0; let dy = 0;
+      if (input.isDown('w')) dy = -1;
+      if (input.isDown('s')) dy = 1;
+      if (input.isDown('a')) dx = -1;
+      if (input.isDown('d')) dx = 1;
+
+      // Default to facing
+      if (dx === 0 && dy === 0) dx = this.facing === 'left' ? -1 : 1;
+
+      // Normalize
+      const len = Math.sqrt(dx * dx + dy * dy);
+      if (len !== 0) { dx /= len; dy /= len; }
+
+      this.dashDir = { x: dx, y: dy };
+
+      // APPLY INSTANT VELOCITY
+      this.dx = this.dashDir.x * P.DASH_SPEED;
+      this.dy = this.dashDir.y * P.DASH_SPEED;
+      
+      context.camera.shake(4); 
+      context.particles.emitGhost(this.x, this.y, this.width, this.height, Config.COLORS.DASH_ACTIVE);
+    }
+
+    // 4. PHYSICS ENGINE
+    if (this.isDashing) {
+      // --- DASH STATE ---
+      this.dashFrameTimer--; 
+      
+      // Lock velocity to dash direction (no gravity, no friction)
+      this.dx = this.dashDir.x * P.DASH_SPEED;
+      this.dy = this.dashDir.y * P.DASH_SPEED;
+      
+      if(this.dashFrameTimer % 2 === 0) {
+          context.particles.emitGhost(this.x, this.y, this.width, this.height, 'rgba(255, 255, 255, 0.5)');
+      }
+
+      // END OF DASH
+      if (this.dashFrameTimer <= 0) { 
+          this.isDashing = false;
+          // MOMENTUM KEY: We do NOT set dx to 0. 
+          // We let the 'Normal State' below handle the slowdown naturally.
+          // We just dampen slightly so it's not uncontrollable.
+          this.dx *= 0.8; 
+          this.dy *= 0.5; 
+      }
+      
+      // Dash Collision Check
+      let nextX = this.x + this.dx;
+      let nextY = this.y + this.dy;
+      for (const plat of context.level.platforms) {
+         if (Utils.checkAABB({x: nextX, y: nextY, width: this.width, height: this.height}, plat)) {
+            this.isDashing = false; 
+            this.dx = 0; this.dy = 0; // Stop on wall hit
+            break; 
+         }
+      }
+      if(this.isDashing) {
+          this.x = nextX;
+          this.y = nextY;
+      }
+
+    } else {
+      // --- NORMAL STATE (MOMENTUM BASED) ---
+      
+      // Horizontal Input
+      let targetSpeed = 0;
+      if (input.isDown('a')) { targetSpeed = -P.RUN_SPEED; this.facing = 'left'; }
+      else if (input.isDown('d')) { targetSpeed = P.RUN_SPEED; this.facing = 'right'; }
+
+      // MOMENTUM LOGIC:
+      // If we are moving faster than run speed (Super Dash), apply drag but don't cap it immediately
+      if (Math.abs(this.dx) > P.RUN_SPEED) {
+          // We are "Supersonic"
+          const drag = this.onGround ? P.GROUND_FRICTION : P.AIR_RESISTANCE;
+          this.dx *= drag; 
+
+          // If player tries to turn AGAINST momentum, apply extra braking
+          if ((this.dx > 0 && targetSpeed < 0) || (this.dx < 0 && targetSpeed > 0)) {
+             this.dx *= 0.9; // Stronger brake
+             this.dx += targetSpeed * 0.1; // Slight influence
+          }
+      } else {
+          // Normal Running (Acceleration)
+          if (targetSpeed !== 0) {
+             // Lerp towards target speed for snappiness
+             this.dx = Utils.lerp(this.dx, targetSpeed, 0.2); 
+          } else {
+             // No input: Stop
+             const friction = this.onGround ? P.GROUND_FRICTION : P.AIR_RESISTANCE;
+             this.dx *= friction;
+             if(Math.abs(this.dx) < 0.1) this.dx = 0;
+          }
+      }
+
+      // Jumping
+      if (this.onGround) {
+        if (input.isDown('w')) this._jump(context, false); 
+        this.wallJumps = this.wallJumpsMax;
+      } else if (this.onWall && this.wallJumps > 0) {
+        if (input.isPressed('w')) this._jump(context, true);
+      }
+
+      this.updatePhysics(context.level, context);
+    }
+
+    // 5. COMBAT & BOUNDS
+    if (input.mouse.down) {
+      const now = Date.now();
+      if (now - this.lastShotTime > this.shootCooldown) {
+        this._shoot(context);
+        this.lastShotTime = now;
+      }
+    }
+
+    if (this.x < 0) this.x = 0;
+    if (this.x > Config.WORLD.WIDTH - this.width) this.x = Config.WORLD.WIDTH - this.width;
+    if (this.y > Config.WORLD.HEIGHT + 100) this.health = 0; 
+  }
+
+  _jump(context, isWall) {
+    const P = Config.PHYSICS;
+    
+    // SUPER DASH MECHANIC:
+    // If we jump while dashing, we CANCEL the dash state (enabling gravity)
+    // but we KEEP the current velocity (dx), converting dash speed into jump momentum.
+    if (this.isDashing) {
+       this.isDashing = false;
+       // Boost horizontal speed slightly if it was a super dash
+       this.dx *= 1.1; 
+    }
+
+    this.dy = P.JUMP_POWER;
+    this.scaleX = 0.6; this.scaleY = 1.4;
+
+    if (isWall) {
+      // Wall Jump Kickoff
+      this.dx = this.onWall === 'left' ? 6 : -6;
+      // If super dashing into a wall, maybe give extra vertical boost?
+      this.wallJumps--;
+      this.facing = this.onWall === 'left' ? 'right' : 'left'; 
+      context.particles.emitDust(this.onWall === 'left' ? this.x : this.x + this.width, this.y + this.height/2);
+    } else {
+      context.particles.emitDust(this.x + this.width/2, this.y + this.height);
+    }
+  }
+  
+  // ... _shoot and draw methods remain unchanged ...
+  _shoot(context) {
+    const cx = this.x + this.width / 2;
+    const cy = this.y + this.height / 2;
+    const worldMouseX = context.input.mouse.x + context.camera.x;
+    const worldMouseY = context.input.mouse.y + context.camera.y;
+    const angle = Utils.getAngle(cx, cy, worldMouseX, worldMouseY);
+    const speed = 12;
+    context.bullets.push({
+      x: cx, y: cy,
+      dx: Math.cos(angle) * speed,
+      dy: Math.sin(angle) * speed,
+      isPlayer: true,
+      radius: 3
+    });
+    context.camera.shake(2);
+    context.particles.emitExplosion(cx + Math.cos(angle)*15, cy + Math.sin(angle)*15, '#fff');
+  }
+
+  draw(ctx, mouse, camera) {
+    ctx.save();
+    const cx = this.x + this.width / 2;
+    const cy = this.y + this.height;
+    
+    ctx.translate(cx, cy);
+    ctx.scale(this.scaleX, this.scaleY);
+    ctx.translate(-cx, -cy);
+
+    ctx.fillStyle = this.isDashing ? '#fff' : this.color;
+    ctx.shadowBlur = 6;
+    ctx.shadowColor = this.color;
+    ctx.fillRect(this.x, this.y, this.width, this.height);
+    
+    this.drawEyes(ctx, mouse.x + camera.x, mouse.y + camera.y, Config.COLORS.PLAYER_EYES);
+    
+    ctx.restore();
+  }
+}
 
       class Enemy extends Entity {
         constructor(x, y) { super(x, y, 24, 24, Config.COLORS.ENEMY); this.health = 100; this.maxHealth = 100; this.hitFlashTimer = 0; }
