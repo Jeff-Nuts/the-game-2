@@ -2,8 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Neon Square - UI Polish</title>
+    <title>Neon Square - Variable Jump</title>
     <style>
+      /* --- RESET & LAYOUT --- */
       * { margin: 0; padding: 0; box-sizing: border-box; }
       body {
         background: #050505;
@@ -14,167 +15,321 @@
         height: 100vh;
         color: #fff;
         font-family: 'Segoe UI', sans-serif;
+        user-select: none;
       }
-      canvas {
-        display: block;
-        background: #0a0a10;
+
+      /* --- MAIN GAME CONTAINER --- */
+      #game-container {
+        position: relative;
+        width: 800px;
+        height: 450px;
+        background: #000;
         box-shadow: 0 0 50px rgba(0, 243, 255, 0.1);
-        cursor: none;
+        overflow: hidden;
       }
+
+      /* LAYER 0: CANVAS */
+      canvas {
+        position: absolute;
+        top: 0; left: 0;
+        display: block;
+        width: 100%;
+        height: 100%;
+        background: #0a0a10;
+        cursor: none;
+        z-index: 0;
+      }
+
+      /* LAYER 1: UI HUD */
+      #ui-layer {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 10;
+        pointer-events: none;
+        transition: opacity 0.3s;
+      }
+
+      #ui-panel {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        width: 220px;
+        height: 100px;
+        background: rgba(0, 0, 0, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 10px;
+        padding: 15px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 12px;
+      }
+
+      .ui-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 12px;
+        font-weight: bold;
+      }
+      .label { color: #fff; margin-right: 10px; min-width: 70px; }
+      
+      .hp-container {
+        flex-grow: 1;
+        height: 12px;
+        background: rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255,255,255,0.1);
+      }
+      #hp-fill {
+        height: 100%;
+        width: 100%;
+        background-color: #FFFF00;
+        transition: width 0.1s linear, background-color 0.2s;
+      }
+
+      .pips-container { display: flex; gap: 4px; }
+      .pip {
+        width: 15px; height: 10px;
+        background-color: #333;
+        border-radius: 1px;
+        transition: background-color 0.1s;
+      }
+      .pip.jump-active { background-color: #FFFF00; box-shadow: 0 0 5px #FFFF00; }
+      .pip.dash-active { background-color: #00f3ff; box-shadow: 0 0 5px #00f3ff; }
+
+      /* LAYER 2: CINEMATIC */
+      #cinematic-layer {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 20;
+        pointer-events: none;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        opacity: 0;
+        transition: opacity 0.5s ease;
+      }
+      
+      #cinematic-layer.active { opacity: 1; }
+
+      .cine-bar {
+        width: 100%;
+        height: 0;
+        background-color: #000;
+        transition: height 0.5s ease;
+      }
+      
+      #cinematic-layer.active .cine-bar { height: 60px; }
+
+      #dialogue-box {
+        position: absolute;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 600px;
+        background: rgba(0,0,0,0.8);
+        border: 1px solid #fff;
+        padding: 20px;
+        text-align: center;
+        font-family: 'Courier New', monospace;
+        display: none;
+      }
+      #cinematic-layer.active #dialogue-box { display: block; }
+
+      /* LAYER 3: GLOBAL FADE */
+      #fade-overlay {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        background: #000;
+        z-index: 30;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 1s ease;
+      }
+      #fade-overlay.black { opacity: 1; }
+
     </style>
   </head>
   <body>
-    <canvas id="game" width="800" height="450"></canvas>
+    
+    <div id="game-container">
+      <canvas id="game" width="800" height="450"></canvas>
+      
+      <div id="ui-layer">
+        <div id="ui-panel">
+          <div class="ui-row">
+            <span class="label">HP</span>
+            <div class="hp-container"><div id="hp-fill"></div></div>
+          </div>
+          <div class="ui-row">
+            <span class="label">Wall Jumps</span>
+            <div id="jumps-container" class="pips-container"></div>
+          </div>
+          <div class="ui-row">
+            <span class="label">Dashes</span>
+            <div id="dashes-container" class="pips-container"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="cinematic-layer">
+        <div class="cine-bar top"></div>
+        <div id="dialogue-box">System Initialized...</div>
+        <div class="cine-bar bottom"></div>
+      </div>
+
+      <div id="fade-overlay"></div>
+    </div>
     
     <script>
-      /**
-       * =========================================
-       * CONFIGURATION
-       * =========================================
-       */
+      // ================== CONFIGURATION ==================
       class Config {
         static PHYSICS = {
-          GRAVITY: 0.6,
-          FRICTION: 0.82,
+          GRAVITY: 0.6, 
+          FRICTION: 0.82, 
           WALL_SLIDE_SPEED: 2,
-          TERMINAL_VELOCITY: 15,
-          DASH_SPEED: 18,
-          DASH_DURATION: 8,
-          DASH_REGEN_TIME: 30 // CHANGED: From 60 to 30 (0.5 seconds)
+          TERMINAL_VELOCITY: 15, 
+          DASH_SPEED: 18, 
+          DASH_DURATION: 8, 
+          DASH_REGEN_TIME: 30,
+          JUMP_CUTOFF: 0.45
+        };
+        
+        // NEW: World Dimensions
+        static WORLD = {
+          WIDTH: 2000,
+          HEIGHT: 1200
         };
 
         static COLORS = {
-          BG: '#0a0a10',
-          PLAYER: '#FFFF00',
-          PLAYER_EYES: '#000000',
-          ENEMY: '#ff0055',
-          ENEMY_EYES: '#330000',
-          WALL: '#1e1e24',
-          WALL_GLOW: 'rgba(0, 0, 0, 0)',
-          UI_BG: 'rgba(0, 0, 0, 0.6)',
-          UI_BORDER: 'rgba(255, 255, 255, 0.3)',
-          TEXT_HINT: '#aaa',
-          DASH_ACTIVE: '#00f3ff',
-          DASH_EMPTY: '#333'
+          PLAYER: '#FFFF00', PLAYER_EYES: '#000000',
+          ENEMY: '#ff0055', ENEMY_EYES: '#330000',
+          WALL: '#1e1e24', WALL_GLOW: 'rgba(0, 0, 0, 0)',
+          DASH_ACTIVE: '#00f3ff'
         };
       }
 
-      /**
-       * =========================================
-       * UTILITIES
-       * =========================================
-       */
+      // ================== UTILITIES ==================
       class Utils {
         static rand(min, max) { return Math.random() * (max - min) + min; }
         static lerp(start, end, amt) { return (1 - amt) * start + amt * end; }
         static checkAABB(rect1, rect2) {
-          return (
-            rect1.x < rect2.x + rect2.width &&
-            rect1.x + rect1.width > rect2.x &&
-            rect1.y < rect2.y + rect2.height &&
-            rect1.y + rect1.height > rect2.y
-          );
+          return (rect1.x < rect2.x + rect2.width && rect1.x + rect1.width > rect2.x &&
+                  rect1.y < rect2.y + rect2.height && rect1.y + rect1.height > rect2.y);
         }
         static getAngle(x1, y1, x2, y2) { return Math.atan2(y2 - y1, x2 - x1); }
       }
 
-      /**
-       * =========================================
-       * INPUT SYSTEM
-       * =========================================
-       */
+      // ================== INPUT ==================
       class InputHandler {
         constructor(canvas) {
-          this.keys = {};       
-          this.keysPressed = {}; 
+          this.keys = {}; this.keysPressed = {};
           this.mouse = { x: 0, y: 0, down: false };
           this.canvas = canvas;
-          this._bindEvents();
+          window.addEventListener('keydown', e => {
+            const k = e.key.toLowerCase(); if(!this.keys[k]) this.keysPressed[k] = true; this.keys[k] = true;
+          });
+          window.addEventListener('keyup', e => {
+            const k = e.key.toLowerCase(); this.keys[k] = false; this.keysPressed[k] = false;
+          });
+          canvas.addEventListener('mousemove', e => {
+            const r = canvas.getBoundingClientRect();
+            this.mouse.x = e.clientX - r.left; this.mouse.y = e.clientY - r.top;
+          });
+          canvas.addEventListener('mousedown', e => { if(e.button===0) this.mouse.down = true; });
+          canvas.addEventListener('mouseup', e => { if(e.button===0) this.mouse.down = false; });
         }
-
-        _bindEvents() {
-          window.addEventListener('keydown', (e) => {
-            const key = e.key.toLowerCase();
-            if (!this.keys[key]) {
-              this.keysPressed[key] = true;
-            }
-            this.keys[key] = true;
-          });
-
-          window.addEventListener('keyup', (e) => {
-            const key = e.key.toLowerCase();
-            this.keys[key] = false;
-            this.keysPressed[key] = false;
-          });
-          
-          this.canvas.addEventListener('mousemove', (e) => {
-            const rect = this.canvas.getBoundingClientRect();
-            this.mouse.x = e.clientX - rect.left;
-            this.mouse.y = e.clientY - rect.top;
-          });
-
-          this.canvas.addEventListener('mousedown', (e) => { if (e.button === 0) this.mouse.down = true; });
-          this.canvas.addEventListener('mouseup', (e) => { if (e.button === 0) this.mouse.down = false; });
-        }
-
         isDown(key) { return !!this.keys[key]; }
         isPressed(key) { return !!this.keysPressed[key]; }
         clearFrame() { this.keysPressed = {}; }
       }
 
-      /**
-       * =========================================
-       * VISUAL FX
-       * =========================================
-       */
-      class Particle {
-        constructor(x, y, type, color, size = null) {
-          this.x = x; this.y = y;
-          this.type = type;
-          this.color = color;
-          this.life = 1.0;
-          this.size = size;
-          this._initPhysics();
+      // ================== UI MANAGER ==================
+      class UIManager {
+        constructor(maxJumps, maxDashes) {
+          this.uiLayer = document.getElementById('ui-layer');
+          this.cinematicLayer = document.getElementById('cinematic-layer');
+          this.fadeOverlay = document.getElementById('fade-overlay');
+          this.hpFill = document.getElementById('hp-fill');
+          this.jumpsContainer = document.getElementById('jumps-container');
+          this.dashesContainer = document.getElementById('dashes-container');
+          
+          this.jumpPips = [];
+          this.dashPips = [];
+          this._createPips(this.jumpsContainer, this.jumpPips, maxJumps);
+          this._createPips(this.dashesContainer, this.dashPips, maxDashes);
         }
 
+        _createPips(container, array, count) {
+          container.innerHTML = '';
+          for(let i=0; i<count; i++) {
+            const pip = document.createElement('div');
+            pip.className = 'pip';
+            container.appendChild(pip);
+            array.push(pip);
+          }
+        }
+
+        update(player) {
+          const hpPct = Math.max(0, player.health / player.maxHealth) * 100;
+          this.hpFill.style.width = `${hpPct}%`;
+          this.hpFill.style.backgroundColor = hpPct > 30 ? Config.COLORS.PLAYER : '#ff0000';
+
+          this.jumpPips.forEach((pip, i) => {
+            if (i < player.wallJumps) pip.classList.add('jump-active');
+            else pip.classList.remove('jump-active');
+          });
+          this.dashPips.forEach((pip, i) => {
+            if (i < player.dashes) pip.classList.add('dash-active');
+            else pip.classList.remove('dash-active');
+          });
+        }
+
+        setCinematicMode(active) {
+          if (active) {
+            this.uiLayer.style.opacity = '0';
+            this.cinematicLayer.classList.add('active');
+          } else {
+            this.uiLayer.style.opacity = '1';
+            this.cinematicLayer.classList.remove('active');
+          }
+        }
+        triggerFade(isBlack) {
+          if (isBlack) this.fadeOverlay.classList.add('black');
+          else this.fadeOverlay.classList.remove('black');
+        }
+      }
+
+      // ================== VISUAL FX ==================
+      class Particle {
+        constructor(x, y, type, color, size = null) {
+          this.x = x; this.y = y; this.type = type; this.color = color; this.life = 1.0; this.size = size;
+          this._initPhysics();
+        }
         _initPhysics() {
           const angle = Utils.rand(0, Math.PI * 2);
           if (this.type === 'dust') {
-            this.dx = Math.cos(angle) * 0.5;
-            this.dy = -Utils.rand(0.5, 2);
-            this.decay = 0.04;
-            this.size = this.size || Utils.rand(2, 4);
+            this.dx = Math.cos(angle) * 0.5; this.dy = -Utils.rand(0.5, 2); this.decay = 0.04; this.size = this.size || Utils.rand(2, 4);
           } else if (this.type === 'spark') {
-            const speed = 3;
-            this.dx = Math.cos(angle) * speed;
-            this.dy = Math.sin(angle) * speed;
-            this.decay = 0.06;
-            this.size = this.size || Utils.rand(2, 5);
+            const speed = 3; this.dx = Math.cos(angle) * speed; this.dy = Math.sin(angle) * speed; this.decay = 0.06; this.size = this.size || Utils.rand(2, 5);
           } else if (this.type === 'trail') {
-            this.dx = 0; this.dy = 0;
-            this.decay = 0.1;
-            this.size = this.size || Utils.rand(2, 4);
+            this.dx = 0; this.dy = 0; this.decay = 0.1; this.size = this.size || Utils.rand(2, 4);
           }
         }
-
         update() {
-          this.x += this.dx;
-          this.y += this.dy;
-          this.life -= this.decay;
-          if (this.type === 'spark') {
-            this.dy += 0.2;
-            this.dx *= 0.95;
-          }
+          this.x += this.dx; this.y += this.dy; this.life -= this.decay;
+          if (this.type === 'spark') { this.dy += 0.2; this.dx *= 0.95; }
         }
-
         draw(ctx) {
-          ctx.globalAlpha = Math.max(0, this.life);
-          ctx.fillStyle = this.color;
-          ctx.shadowBlur = this.type === 'spark' ? 10 : 0;
-          ctx.shadowColor = this.color;
+          ctx.globalAlpha = Math.max(0, this.life); ctx.fillStyle = this.color;
+          ctx.shadowBlur = this.type === 'spark' ? 10 : 0; ctx.shadowColor = this.color;
           ctx.fillRect(this.x - this.size/2, this.y - this.size/2, this.size, this.size);
-          ctx.globalAlpha = 1.0;
-          ctx.shadowBlur = 0;
+          ctx.globalAlpha = 1.0; ctx.shadowBlur = 0;
         }
       }
 
@@ -182,56 +337,31 @@
         constructor() { this.particles = []; }
         update() {
           for (let i = this.particles.length - 1; i >= 0; i--) {
-            this.particles[i].update();
-            if (this.particles[i].life <= 0) this.particles.splice(i, 1);
+            this.particles[i].update(); if (this.particles[i].life <= 0) this.particles.splice(i, 1);
           }
         }
         draw(ctx) { this.particles.forEach(p => p.draw(ctx)); }
         emitDust(x, y) { for (let i = 0; i < 4; i++) this.particles.push(new Particle(x, y, 'dust', '#888')); }
         emitExplosion(x, y, color) { for (let i = 0; i < 12; i++) this.particles.push(new Particle(x, y, 'spark', color)); }
-        emitTrail(x, y, color, size) {
-           if (Math.random() > 0.3) { 
-            this.particles.push(new Particle(x, y, 'trail', color, size));
-           }
-        }
+        emitTrail(x, y, color, size) { if (Math.random() > 0.3) this.particles.push(new Particle(x, y, 'trail', color, size)); }
         emitGhost(x, y, width, height, color) {
-           const p = new Particle(x + width/2, y + height/2, 'trail', color, width);
-           p.decay = 0.15; 
-           this.particles.push(p);
+           const p = new Particle(x + width/2, y + height/2, 'trail', color, width); p.decay = 0.15; this.particles.push(p);
         }
       }
 
-      /**
-       * =========================================
-       * ENTITIES
-       * =========================================
-       */
+      // ================== ENTITIES ==================
       class Entity {
         constructor(x, y, w, h, color) {
-          this.x = x; this.y = y;
-          this.width = w; this.height = h;
-          this.color = color;
-          this.dx = 0; this.dy = 0;
-          this.onGround = false;
-          this.onWall = false;
-          this.scaleX = 1; this.scaleY = 1;
-          this.facing = 'right';
+          this.x = x; this.y = y; this.width = w; this.height = h; this.color = color;
+          this.dx = 0; this.dy = 0; this.onGround = false; this.onWall = false;
+          this.scaleX = 1; this.scaleY = 1; this.facing = 'right';
         }
-
         updatePhysics(level, context) {
-          this.scaleX = Utils.lerp(this.scaleX, 1, 0.2);
-          this.scaleY = Utils.lerp(this.scaleY, 1, 0.2);
+          this.scaleX = Utils.lerp(this.scaleX, 1, 0.2); this.scaleY = Utils.lerp(this.scaleY, 1, 0.2);
           this.dy += Config.PHYSICS.GRAVITY;
-          
-          if (this.onWall && this.dy > 0 && !this.onGround) {
-            this.dy = Config.PHYSICS.WALL_SLIDE_SPEED;
-          }
-
-          let nextX = this.x + this.dx;
-          let nextY = this.y + this.dy;
-          this.onGround = false;
-          this.onWall = false;
-
+          if (this.onWall && this.dy > 0 && !this.onGround) this.dy = Config.PHYSICS.WALL_SLIDE_SPEED;
+          let nextX = this.x + this.dx; let nextY = this.y + this.dy;
+          this.onGround = false; this.onWall = false;
           for (const plat of level.platforms) {
             if (Utils.checkAABB({x: nextX, y: this.y, width: this.width, height: this.height}, plat)) {
               if (this.dx > 0) { nextX = plat.x - this.width; this.onWall = 'right'; }
@@ -240,269 +370,269 @@
             }
             if (Utils.checkAABB({x: nextX, y: nextY, width: this.width, height: this.height}, plat)) {
               if (this.dy > 0) {
-                nextY = plat.y - this.height;
-                this.onGround = true;
-                if (this.dy > 2) {
-                  this.scaleX = 1.4; this.scaleY = 0.6;
-                  context.particles.emitDust(this.x + this.width / 2, this.y + this.height);
-                }
-              } else if (this.dy < 0) {
-                nextY = plat.y + plat.height;
-              }
+                nextY = plat.y - this.height; this.onGround = true;
+                if (this.dy > 2) { this.scaleX = 1.4; this.scaleY = 0.6; context.particles.emitDust(this.x + this.width / 2, this.y + this.height); }
+              } else if (this.dy < 0) nextY = plat.y + plat.height;
               this.dy = 0;
             }
           }
-          this.x = nextX;
-          this.y = nextY;
+          this.x = nextX; this.y = nextY;
         }
-
         drawEyes(ctx, targetX, targetY, color) {
-          const eyeSize = 4;
-          const eyeSpacing = 6;
-          const faceCenterX = this.x + this.width / 2;
-          const faceCenterY = this.y + this.height / 3;
-          const lookX = targetX - faceCenterX;
-          const lookY = targetY - faceCenterY;
-          const maxMove = 3;
-          const dist = Math.sqrt(lookX*lookX + lookY*lookY) || 1;
-          const moveX = (lookX / dist) * maxMove;
-          const moveY = (lookY / dist) * maxMove;
-
-          ctx.fillStyle = color;
-          ctx.shadowBlur = 0;
-          ctx.fillRect(faceCenterX - eyeSpacing + moveX - eyeSize/2, faceCenterY + moveY - eyeSize/2, eyeSize, eyeSize);
-          ctx.fillRect(faceCenterX + eyeSpacing + moveX - eyeSize/2, faceCenterY + moveY - eyeSize/2, eyeSize, eyeSize);
+          const es = 4; const esp = 6; const cx = this.x + this.width / 2; const cy = this.y + this.height / 3;
+          const lx = targetX - cx; const ly = targetY - cy; const mm = 3;
+          const d = Math.sqrt(lx*lx + ly*ly) || 1; const mx = (lx / d) * mm; const my = (ly / d) * mm;
+          ctx.fillStyle = color; ctx.shadowBlur = 0;
+          ctx.fillRect(cx - esp + mx - es/2, cy + my - es/2, es, es);
+          ctx.fillRect(cx + esp + mx - es/2, cy + my - es/2, es, es);
         }
       }
 
       class Player extends Entity {
         constructor() {
           super(50, 200, 24, 24, Config.COLORS.PLAYER);
-          this.speed = 4;
-          this.jumpPower = -11;
-          this.wallJumpsMax = 3;
-          this.wallJumps = 3;
-          this.health = 100;
-          this.maxHealth = 100;
-          this.dashes = 3;
-          this.maxDashes = 3;
-          this.dashCooldownTimer = 0;
-          this.isDashing = false;
-          this.dashFrameTimer = 0;
-          this.lastShotTime = 0;
-          this.shootCooldown = 120;
+          this.speed = 4; 
+          this.jumpPower = -13; // INCREASED JUMP POWER
+          this.wallJumpsMax = 3; this.wallJumps = 3;
+          this.health = 100; this.maxHealth = 100;
+          this.dashes = 3; this.maxDashes = 3;
+          this.dashCooldownTimer = 0; this.isDashing = false; this.dashFrameTimer = 0;
+          this.lastShotTime = 0; this.shootCooldown = 120;
         }
+    update(context) {
+    const input = context.input;
+    
+    // --- MOVEMENT & DASH LOGIC ---
+    if (!input.isDown('w') && this.dy < -3) { 
+       this.dy *= Config.PHYSICS.JUMP_CUTOFF; 
+    }
 
-        update(context) {
-          const input = context.input;
-          
-          if (this.dashes < this.maxDashes) {
-            this.dashCooldownTimer++;
-            if (this.dashCooldownTimer >= Config.PHYSICS.DASH_REGEN_TIME) {
-              this.dashes++;
-              this.dashCooldownTimer = 0;
-            }
-          }
+    if (this.dashes < this.maxDashes) {
+      this.dashCooldownTimer++; 
+      if (this.dashCooldownTimer >= Config.PHYSICS.DASH_REGEN_TIME) { 
+         this.dashes++; 
+         this.dashCooldownTimer = 0; 
+      }
+    }
 
-          if (input.isPressed('shift') && this.dashes > 0 && !this.isDashing) {
-            this.isDashing = true;
-            this.dashes--;
-            this.dashFrameTimer = Config.PHYSICS.DASH_DURATION;
-            this.dashCooldownTimer = 0;
-            this.dx = (this.facing === 'left' ? -1 : 1) * Config.PHYSICS.DASH_SPEED;
-            this.dy = 0; 
-            context.camera.shake(4);
-            context.particles.emitGhost(this.x, this.y, this.width, this.height, Config.COLORS.DASH_ACTIVE);
-          }
+    if (input.isPressed('shift') && this.dashes > 0 && !this.isDashing) {
+      this.isDashing = true; 
+      this.dashes--; 
+      this.dashFrameTimer = Config.PHYSICS.DASH_DURATION; 
+      this.dashCooldownTimer = 0;
+      this.dx = (this.facing === 'left' ? -1 : 1) * Config.PHYSICS.DASH_SPEED; 
+      this.dy = 0; 
+      context.camera.shake(4); 
+      context.particles.emitGhost(this.x, this.y, this.width, this.height, Config.COLORS.DASH_ACTIVE);
+    }
 
-          if (this.isDashing) {
-            this.dashFrameTimer--;
-            this.dy = 0; 
-            this.dx = (this.facing === 'left' ? -1 : 1) * Config.PHYSICS.DASH_SPEED;
-            
-            if(this.dashFrameTimer % 2 === 0) {
-                context.particles.emitGhost(this.x, this.y, this.width, this.height, 'rgba(255, 255, 255, 0.5)');
-            }
+    if (this.isDashing) {
+      this.dashFrameTimer--; 
+      this.dy = 0; 
+      this.dx = (this.facing === 'left' ? -1 : 1) * Config.PHYSICS.DASH_SPEED;
+      
+      if(this.dashFrameTimer % 2 === 0) {
+          context.particles.emitGhost(this.x, this.y, this.width, this.height, 'rgba(255, 255, 255, 0.5)');
+      }
 
-            if (this.dashFrameTimer <= 0) {
-              this.isDashing = false;
-              this.dx *= 0.5; 
-            }
-            
-            let nextX = this.x + this.dx;
-            for (const plat of context.level.platforms) {
-               if (Utils.checkAABB({x: nextX, y: this.y, width: this.width, height: this.height}, plat)) {
-                  this.isDashing = false;
-                  this.dx = 0;
-                  nextX = this.x; 
-                  break;
-               }
-            }
-            this.x = nextX;
+      if (this.dashFrameTimer <= 0) { 
+          this.isDashing = false; 
+          this.dx *= 0.5; 
+      }
+      
+      let nextX = this.x + this.dx;
+      for (const plat of context.level.platforms) {
+         if (Utils.checkAABB({x: nextX, y: this.y, width: this.width, height: this.height}, plat)) {
+            this.isDashing = false; 
+            this.dx = 0; 
+            nextX = this.x; 
+            break;
+         }
+      }
+      this.x = nextX;
 
-          } else {
-            if (input.isDown('a')) {
-                this.dx = -this.speed;
-                this.facing = 'left';
-            }
-            else if (input.isDown('d')) {
-                this.dx = this.speed;
-                this.facing = 'right';
-            }
-            else this.dx *= Config.PHYSICS.FRICTION;
+    } else {
+      if (input.isDown('a')) { 
+          this.dx = -this.speed; 
+          this.facing = 'left'; 
+      }
+      else if (input.isDown('d')) { 
+          this.dx = this.speed; 
+          this.facing = 'right'; 
+      }
+      else this.dx *= Config.PHYSICS.FRICTION;
 
-            if (this.onGround) {
-              if (input.isDown('w')) this._jump(context, false);
-              this.wallJumps = this.wallJumpsMax;
-            } else if (this.onWall && this.wallJumps > 0) {
-              if (input.isPressed('w')) this._jump(context, true);
-            }
+      if (this.onGround) {
+        if (input.isDown('w')) this._jump(context, false); 
+        this.wallJumps = this.wallJumpsMax;
+      } else if (this.onWall && this.wallJumps > 0) {
+        if (input.isPressed('w')) this._jump(context, true);
+      }
 
-            this.updatePhysics(context.level, context);
-          }
+      this.updatePhysics(context.level, context);
+    }
 
-          if (input.mouse.down) {
-            const now = Date.now();
-            if (now - this.lastShotTime > this.shootCooldown) {
-              this._shoot(context);
-              this.lastShotTime = now;
-            }
-          }
+    // --- COMBAT ---
+    if (input.mouse.down) {
+      const now = Date.now();
+      if (now - this.lastShotTime > this.shootCooldown) {
+        this._shoot(context);
+        this.lastShotTime = now;
+      }
+    }
 
-          if (this.x < 0) this.x = 0;
-          if (this.x > 800 - this.width) this.x = 800 - this.width;
-          if (this.y > 500) this.health = 0; 
-        }
-
+    // --- NEW: WORLD BOUNDS CHECKS ---
+    if (this.x < 0) this.x = 0;
+    if (this.x > Config.WORLD.WIDTH - this.width) this.x = Config.WORLD.WIDTH - this.width;
+    if (this.y > Config.WORLD.HEIGHT + 100) this.health = 0; 
+  }
         _jump(context, isWall) {
-          this.dy = this.jumpPower;
-          this.scaleX = 0.6; this.scaleY = 1.4;
+          this.dy = this.jumpPower; this.scaleX = 0.6; this.scaleY = 1.4;
           if (isWall) {
-            this.dx = this.onWall === 'left' ? 6 : -6;
-            this.wallJumps--;
-            this.facing = this.onWall === 'left' ? 'right' : 'left'; 
+            this.dx = this.onWall === 'left' ? 6 : -6; this.wallJumps--; this.facing = this.onWall === 'left' ? 'right' : 'left'; 
             context.particles.emitDust(this.onWall === 'left' ? this.x : this.x + this.width, this.y + this.height/2);
-          } else {
-            context.particles.emitDust(this.x + this.width/2, this.y + this.height);
-          }
+          } else context.particles.emitDust(this.x + this.width/2, this.y + this.height);
         }
-
         _shoot(context) {
-          const cx = this.x + this.width / 2;
-          const cy = this.y + this.height / 2;
-          const angle = Utils.getAngle(cx, cy, context.input.mouse.x, context.input.mouse.y);
-          const speed = 12;
-          context.bullets.push({
-            x: cx, y: cy,
-            dx: Math.cos(angle) * speed,
-            dy: Math.sin(angle) * speed,
-            isPlayer: true,
-            radius: 3
-          });
-          context.camera.shake(2);
-          context.particles.emitExplosion(cx + Math.cos(angle)*15, cy + Math.sin(angle)*15, '#fff');
-        }
+    const cx = this.x + this.width / 2;
+    const cy = this.y + this.height / 2;
+    
+    // Calculate Mouse Position in the World
+    const worldMouseX = context.input.mouse.x + context.camera.x;
+    const worldMouseY = context.input.mouse.y + context.camera.y;
 
-        draw(ctx, mouse) {
-          ctx.save();
-          const cx = this.x + this.width / 2;
-          const cy = this.y + this.height;
-          ctx.translate(cx, cy);
-          ctx.scale(this.scaleX, this.scaleY);
-          ctx.translate(-cx, -cy);
+    const angle = Utils.getAngle(cx, cy, worldMouseX, worldMouseY);
+    const speed = 12;
+    
+    context.bullets.push({
+      x: cx, y: cy,
+      dx: Math.cos(angle) * speed,
+      dy: Math.sin(angle) * speed,
+      isPlayer: true,
+      radius: 3
+    });
+    context.camera.shake(2);
+    context.particles.emitExplosion(cx + Math.cos(angle)*15, cy + Math.sin(angle)*15, '#fff');
+  }
+  draw(ctx, mouse, camera) {
+    ctx.save();
+    const cx = this.x + this.width / 2;
+    const cy = this.y + this.height;
+    
+    ctx.translate(cx, cy);
+    ctx.scale(this.scaleX, this.scaleY);
+    ctx.translate(-cx, -cy);
 
-          ctx.fillStyle = this.isDashing ? '#fff' : this.color; 
-          ctx.shadowBlur = 6;
-          ctx.shadowColor = this.color;
-          ctx.fillRect(this.x, this.y, this.width, this.height);
-          
-          this.drawEyes(ctx, mouse.x, mouse.y, Config.COLORS.PLAYER_EYES);
-          ctx.restore();
-        }
+    ctx.fillStyle = this.isDashing ? '#fff' : this.color;
+    ctx.shadowBlur = 6;
+    ctx.shadowColor = this.color;
+    ctx.fillRect(this.x, this.y, this.width, this.height);
+    
+    // Fix Eye Tracking
+    this.drawEyes(ctx, mouse.x + camera.x, mouse.y + camera.y, Config.COLORS.PLAYER_EYES);
+    
+    ctx.restore();
+  }
       }
 
       class Enemy extends Entity {
-        constructor(x, y) {
-          super(x, y, 24, 24, Config.COLORS.ENEMY);
-          this.health = 100;
-          this.maxHealth = 100;
-          this.hitFlashTimer = 0;
-        }
-
-        update(context, player) {
-          this.dx *= Config.PHYSICS.FRICTION;
-          this.updatePhysics(context.level, context);
-        }
-
-        takeDamage(amount) {
-          this.health -= amount;
-          this.hitFlashTimer = 5;
-        }
-
+        constructor(x, y) { super(x, y, 24, 24, Config.COLORS.ENEMY); this.health = 100; this.maxHealth = 100; this.hitFlashTimer = 0; }
+        update(context, player) { this.dx *= Config.PHYSICS.FRICTION; this.updatePhysics(context.level, context); }
+        takeDamage(amount) { this.health -= amount; this.hitFlashTimer = 5; }
         draw(ctx, player) {
-          ctx.fillStyle = this.hitFlashTimer > 0 ? '#fff' : this.color;
-          if (this.hitFlashTimer > 0) this.hitFlashTimer--;
-          ctx.shadowBlur = 10;
-          ctx.shadowColor = this.color;
-          ctx.fillRect(this.x, this.y, this.width, this.height);
-          const targetX = player.x + player.width/2;
-          const targetY = player.y + player.height/2;
-          this.drawEyes(ctx, targetX, targetY, Config.COLORS.ENEMY_EYES);
-          
+          ctx.fillStyle = this.hitFlashTimer > 0 ? '#fff' : this.color; if (this.hitFlashTimer > 0) this.hitFlashTimer--;
+          ctx.shadowBlur = 10; ctx.shadowColor = this.color; ctx.fillRect(this.x, this.y, this.width, this.height);
+          const tx = player.x + player.width/2; const ty = player.y + player.height/2;
+          this.drawEyes(ctx, tx, ty, Config.COLORS.ENEMY_EYES);
           const hpPct = Math.max(0, this.health / this.maxHealth);
-          ctx.shadowBlur = 0;
-          ctx.fillStyle = '#333';
-          ctx.fillRect(this.x, this.y - 8, this.width, 3);
-          ctx.fillStyle = '#f00';
-          ctx.fillRect(this.x, this.y - 8, this.width * hpPct, 3);
+          ctx.shadowBlur = 0; ctx.fillStyle = '#333'; ctx.fillRect(this.x, this.y - 8, this.width, 3);
+          ctx.fillStyle = '#f00'; ctx.fillRect(this.x, this.y - 8, this.width * hpPct, 3);
         }
       }
 
-      /**
-       * =========================================
-       * GAME ENGINE
-       * =========================================
-       */
+      // ================== GAME LOGIC ==================
       class Level {
-        constructor() {
-          this.platforms = [
-            { x: 0, y: 400, width: 800, height: 50 },
-            { x: 0, y: 0, width: 40, height: 450 },
-            { x: 760, y: 0, width: 40, height: 450 },
-            { x: 350, y: 320, width: 100, height: 80 },
-            { x: 380, y: 220, width: 40, height: 100 },
-            { x: 40, y: 300, width: 100, height: 20 },
-            { x: 140, y: 220, width: 20, height: 100 },
-            { x: 40, y: 150, width: 120, height: 20 },
-            { x: 600, y: 280, width: 160, height: 20 },
-            { x: 550, y: 180, width: 20, height: 120 },
-            { x: 620, y: 120, width: 140, height: 20 },
-            { x: 300, y: 100, width: 200, height: 20 },
-          ];
-        }
-        draw(ctx) {
-          ctx.beginPath();
-          for (const plat of this.platforms) ctx.rect(plat.x, plat.y, plat.width, plat.height);
-          ctx.fillStyle = Config.COLORS.WALL;
-          ctx.shadowColor = Config.COLORS.WALL_GLOW;
-          ctx.shadowBlur = 10;
-          ctx.fill();
-          ctx.shadowBlur = 0;
-        }
-      }
+  constructor() {
+    this.platforms = [
+      // --- BORDERS ---
+      { x: -40, y: 0, width: 40, height: Config.WORLD.HEIGHT }, // Far Left Wall
+      { x: Config.WORLD.WIDTH, y: 0, width: 40, height: Config.WORLD.HEIGHT }, // Far Right Wall
+      { x: 0, y: -40, width: Config.WORLD.WIDTH, height: 40 }, // Ceiling
+      { x: 0, y: Config.WORLD.HEIGHT - 50, width: Config.WORLD.WIDTH, height: 90 }, // Bottom Floor
 
-      class Camera {
-        constructor() { this.x = 0; this.y = 0; this.shakePower = 0; }
-        shake(amount) { this.shakePower = amount; }
-        update() {
-          if (this.shakePower > 0) {
-            this.x = Utils.rand(-this.shakePower, this.shakePower);
-            this.y = Utils.rand(-this.shakePower, this.shakePower);
-            this.shakePower *= 0.9;
-            if (this.shakePower < 0.5) this.shakePower = 0;
-          } else { this.x = 0; this.y = 0; }
-        }
-      }
+      // --- STARTING AREA (Bottom Left) ---
+      { x: 0, y: 800, width: 400, height: 50 }, // Safe start floor
+      { x: 400, y: 750, width: 20, height: 100 }, // Small step
+
+      // --- THE CLIMB (Vertical Section) ---
+      { x: 200, y: 650, width: 100, height: 20 },
+      { x: 50, y: 550, width: 20, height: 200 }, // Wall jump surface
+      { x: 250, y: 450, width: 150, height: 20 },
+      { x: 500, y: 550, width: 20, height: 300 }, // Tall divider wall
+
+      // --- CENTRAL ARENA ---
+      { x: 600, y: 700, width: 300, height: 20 },
+      { x: 700, y: 600, width: 100, height: 20 },
+      { x: 950, y: 500, width: 20, height: 200 }, // Obstacle
+      { x: 1100, y: 650, width: 200, height: 20 },
+      
+      // --- PARKOUR SECTION (Top Right) ---
+      { x: 1300, y: 400, width: 100, height: 20 },
+      { x: 1500, y: 300, width: 100, height: 20 },
+      { x: 1700, y: 200, width: 100, height: 20 },
+      { x: 1850, y: 150, width: 150, height: 20 }, // High perch
+
+      // --- FLOATING ISLANDS ---
+      { x: 800, y: 300, width: 200, height: 20 },
+      { x: 500, y: 200, width: 150, height: 20 },
+    ];
+  }
+  
+  draw(ctx) {
+    ctx.beginPath(); 
+    for (const p of this.platforms) ctx.rect(p.x, p.y, p.width, p.height);
+    ctx.fillStyle = Config.COLORS.WALL; 
+    ctx.shadowColor = Config.COLORS.WALL_GLOW; 
+    ctx.shadowBlur = 10; 
+    ctx.fill(); 
+    ctx.shadowBlur = 0;
+  }
+}
+
+class Camera {
+  constructor() { 
+    this.x = 0; 
+    this.y = 0; 
+    this.shakePower = 0; 
+  }
+  
+  shake(amount) { this.shakePower = amount; }
+  
+  // NEW: Follow logic
+  update(player, canvasWidth, canvasHeight) {
+    // 1. Target position: Center the player
+    let targetX = player.x + player.width / 2 - canvasWidth / 2;
+    let targetY = player.y + player.height / 2 - canvasHeight / 2;
+
+    // 2. Clamp to World Bounds (Don't show outside the map)
+    targetX = Math.max(0, Math.min(targetX, Config.WORLD.WIDTH - canvasWidth));
+    targetY = Math.max(0, Math.min(targetY, Config.WORLD.HEIGHT - canvasHeight));
+
+    // 3. Smooth Follow (Linear Interpolation)
+    this.x += (targetX - this.x) * 0.1; // 0.1 is the "smoothness" (lower is slower)
+    this.y += (targetY - this.y) * 0.1;
+
+    // 4. Apply Shake
+    if (this.shakePower > 0) {
+      const shakeX = Utils.rand(-this.shakePower, this.shakePower);
+      const shakeY = Utils.rand(-this.shakePower, this.shakePower);
+      this.x += shakeX;
+      this.y += shakeY;
+      this.shakePower *= 0.9; 
+      if (this.shakePower < 0.5) this.shakePower = 0;
+    }
+  }
+}
 
       class Game {
         constructor() {
@@ -513,6 +643,7 @@
           this.particles = new ParticleSystem();
           this.level = new Level();
           this.reset();
+          this.ui = new UIManager(this.player.wallJumpsMax, this.player.maxDashes);
           this.loop = this.loop.bind(this);
           requestAnimationFrame(this.loop);
         }
@@ -524,172 +655,106 @@
         }
 
         get context() {
-          return {
-            input: this.input,
-            camera: this.camera,
-            particles: this.particles,
-            level: this.level,
-            bullets: this.bullets
-          };
+          return { input: this.input, camera: this.camera, particles: this.particles, level: this.level, bullets: this.bullets };
         }
 
         update() {
-          this.camera.update();
-          this.particles.update();
-          this.player.update(this.context);
-          this.enemies.forEach(e => e.update(this.context, this.player));
-          this.updateBullets();
-          this.input.clearFrame();
-        }
+    // Pass Player and Canvas Dimensions to Camera
+    this.camera.update(this.player, this.canvas.width, this.canvas.height);
+    
+    this.particles.update();
+    this.player.update(this.context);
+    this.enemies.forEach(e => e.update(this.context, this.player));
+    this.updateBullets();
+    this.ui.update(this.player);
+    this.input.clearFrame();
+  }
 
-        updateBullets() {
-          for (let i = this.bullets.length - 1; i >= 0; i--) {
-            let b = this.bullets[i];
-            b.x += b.dx; b.y += b.dy;
-            this.particles.emitTrail(b.x, b.y, b.isPlayer ? Config.COLORS.PLAYER : Config.COLORS.ENEMY, b.radius);
+  // Updated bounds check for Bullets
+  updateBullets() {
+    for (let i = this.bullets.length - 1; i >= 0; i--) {
+      let b = this.bullets[i];
+      b.x += b.dx; b.y += b.dy;
+      
+      this.particles.emitTrail(b.x, b.y, b.isPlayer ? Config.COLORS.PLAYER : Config.COLORS.ENEMY, b.radius);
 
-            if (b.x < 0 || b.x > 800 || b.y < 0 || b.y > 450) {
-               this.bullets.splice(i, 1); continue;
-            }
+      // Check against WORLD dimensions
+      if (b.x < 0 || b.x > Config.WORLD.WIDTH || b.y < 0 || b.y > Config.WORLD.HEIGHT) {
+         this.bullets.splice(i, 1); continue;
+      }
 
-            let hitPlat = false;
-            for (let plat of this.level.platforms) {
-               if (Utils.checkAABB({x: b.x - b.radius, y: b.y - b.radius, width: b.radius*2, height: b.radius*2}, plat)) {
-                  hitPlat = true;
-                  this.particles.emitExplosion(b.x, b.y, '#ccc');
-                  break;
+      let hitPlat = false;
+      for (let plat of this.level.platforms) {
+         if (Utils.checkAABB({x: b.x - b.radius, y: b.y - b.radius, width: b.radius*2, height: b.radius*2}, plat)) {
+            hitPlat = true;
+            this.particles.emitExplosion(b.x, b.y, '#ccc');
+            break;
+         }
+      }
+      if (hitPlat) { this.bullets.splice(i, 1); continue; }
+
+      if (b.isPlayer) {
+         for (let j = this.enemies.length - 1; j >= 0; j--) {
+            let e = this.enemies[j];
+            if (Utils.checkAABB({x: b.x, y: b.y, width: b.radius, height: b.radius}, e)) {
+               e.takeDamage(20);
+               this.particles.emitExplosion(b.x, b.y, Config.COLORS.ENEMY);
+               this.bullets.splice(i, 1);
+               if (e.health <= 0) {
+                  this.particles.emitExplosion(e.x+12, e.y+12, Config.COLORS.ENEMY);
+                  e.health = e.maxHealth; 
                }
+               break;
             }
-            if (hitPlat) { this.bullets.splice(i, 1); continue; }
+         }
+      }
+    }
+  }
 
-            if (b.isPlayer) {
-               for (let j = this.enemies.length - 1; j >= 0; j--) {
-                  let e = this.enemies[j];
-                  if (Utils.checkAABB({x: b.x, y: b.y, width: b.radius, height: b.radius}, e)) {
-                     e.takeDamage(20);
-                     this.particles.emitExplosion(b.x, b.y, Config.COLORS.ENEMY);
-                     this.bullets.splice(i, 1);
-                     if (e.health <= 0) {
-                        this.particles.emitExplosion(e.x+12, e.y+12, Config.COLORS.ENEMY);
-                        e.health = e.maxHealth; 
-                     }
-                     break;
-                  }
-               }
-            }
-          }
-        }
+  draw() {
+    this.ctx.fillStyle = Config.COLORS.BG;
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        draw() {
-          this.ctx.fillStyle = Config.COLORS.BG;
-          this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-          this.ctx.save();
-          this.ctx.translate(this.camera.x, this.camera.y);
-          this.level.draw(this.ctx);
-          this.particles.draw(this.ctx);
-          this.enemies.forEach(e => e.draw(this.ctx, this.player));
-          this.player.draw(this.ctx, this.input.mouse);
-          
-          for (let b of this.bullets) {
-             this.ctx.fillStyle = b.isPlayer ? '#fff' : '#ffaaaa';
-             this.ctx.shadowBlur = 8;
-             this.ctx.shadowColor = b.isPlayer ? Config.COLORS.PLAYER : Config.COLORS.ENEMY;
-             this.ctx.beginPath();
-             this.ctx.arc(b.x, b.y, b.radius, 0, Math.PI*2);
-             this.ctx.fill();
-          }
-          
-          // Cursor
-          this.ctx.shadowBlur = 4;
-          this.ctx.shadowColor = '#fff';
-          this.ctx.strokeStyle = '#fff';
-          this.ctx.lineWidth = 1;
-          const mx = this.input.mouse.x; 
-          const my = this.input.mouse.y;
-          this.ctx.strokeRect(mx - 6, my - 6, 12, 12);
-          this.ctx.beginPath();
-          this.ctx.moveTo(mx, my-2); this.ctx.lineTo(mx, my+2);
-          this.ctx.moveTo(mx-2, my); this.ctx.lineTo(mx+2, my);
-          this.ctx.stroke();
+    this.ctx.save();
+    
+    // APPLY CAMERA TRANSFORM (Negative X/Y)
+    this.ctx.translate(-this.camera.x, -this.camera.y);
 
-          this.ctx.restore();
-          
-          // UI DRAW CALL
-          this._drawUI();
-        }
+    this.level.draw(this.ctx);
+    this.particles.draw(this.ctx);
+    this.enemies.forEach(e => e.draw(this.ctx, this.player));
+    
+    // Pass Camera to player draw
+    this.player.draw(this.ctx, this.input.mouse, this.camera);
+    
+    for (let b of this.bullets) {
+       this.ctx.fillStyle = b.isPlayer ? '#fff' : '#ffaaaa';
+       this.ctx.shadowBlur = 8; 
+       this.ctx.shadowColor = b.isPlayer ? Config.COLORS.PLAYER : Config.COLORS.ENEMY;
+       this.ctx.beginPath(); 
+       this.ctx.arc(b.x, b.y, b.radius, 0, Math.PI*2); 
+       this.ctx.fill();
+    }
 
-        _drawUI() {
-          const p = this.player;
-          
-          // Panel Config
-          const panelW = 220;
-          const panelH = 110; // Increased Height for Padding
-          const margin = 20;
-          const startX = this.canvas.width - panelW - margin;
-          const startY = margin;
-          
-          // Draw Panel Background
-          this.ctx.fillStyle = Config.COLORS.UI_BG;
-          this.ctx.beginPath();
-          if (this.ctx.roundRect) this.ctx.roundRect(startX, startY, panelW, panelH, 10);
-          else this.ctx.fillRect(startX, startY, panelW, panelH);
-          this.ctx.fill();
-          
-          // Border
-          this.ctx.strokeStyle = Config.COLORS.UI_BORDER;
-          this.ctx.lineWidth = 1;
-          this.ctx.stroke();
+    // Restore to Screen Space to draw the cursor
+    this.ctx.restore();
+    
+    // Draw Cursor (Screen Space)
+    this.ctx.shadowBlur = 4; 
+    this.ctx.shadowColor = '#fff'; 
+    this.ctx.strokeStyle = '#fff'; 
+    this.ctx.lineWidth = 1;
+    const mx = this.input.mouse.x; 
+    const my = this.input.mouse.y;
+    
+    this.ctx.strokeRect(mx - 6, my - 6, 12, 12);
+    this.ctx.beginPath(); 
+    this.ctx.moveTo(mx, my-2); this.ctx.lineTo(mx, my+2); 
+    this.ctx.moveTo(mx-2, my); this.ctx.lineTo(mx+2, my); 
+    this.ctx.stroke();
+  }
 
-          // Calculate inner content positions with more padding from top
-          const contentStartX = startX + 15;
-          const contentStartY = startY + 25; // Added top padding (text starts here)
-
-          // 1. Health Bar
-          const hpPct = Math.max(0, p.health / p.maxHealth);
-          const barW = panelW - 30;
-          const barH = 12;
-          
-          // HP Label
-          this.ctx.fillStyle = '#fff';
-          this.ctx.font = 'bold 12px sans-serif';
-          this.ctx.fillText('HP', contentStartX - 2, contentStartY - 6);
-
-          // HP Bar Rect
-          this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
-          this.ctx.fillRect(contentStartX, contentStartY, barW, barH);
-          
-          this.ctx.fillStyle = hpPct > 0.3 ? Config.COLORS.PLAYER : 'red';
-          this.ctx.fillRect(contentStartX, contentStartY, barW * hpPct, barH);
-
-          // 2. Wall Jumps (Blocks)
-          const row2Y = contentStartY + 30;
-          this.ctx.fillStyle = '#fff';
-          this.ctx.font = '12px sans-serif';
-          this.ctx.fillText('Wall Jumps:', contentStartX, row2Y);
-          
-          for(let i=0; i<p.wallJumpsMax; i++) {
-            this.ctx.fillStyle = i < p.wallJumps ? Config.COLORS.PLAYER : Config.COLORS.DASH_EMPTY;
-            this.ctx.fillRect(contentStartX + 80 + (i*20), row2Y - 10, 15, 10);
-          }
-
-          // 3. Dashes (Blocks)
-          const row3Y = row2Y + 25;
-          this.ctx.fillStyle = '#fff';
-          this.ctx.fillText('Dashes:', contentStartX, row3Y);
-          
-          for(let i=0; i<p.maxDashes; i++) {
-            this.ctx.fillStyle = i < p.dashes ? Config.COLORS.DASH_ACTIVE : Config.COLORS.DASH_EMPTY;
-            this.ctx.beginPath();
-            this.ctx.rect(contentStartX + 80 + (i*20), row3Y - 10, 15, 10);
-            this.ctx.fill();
-          }
-        }
-
-        loop() {
-          this.update();
-          this.draw();
-          requestAnimationFrame(this.loop);
-        }
+        loop() { this.update(); this.draw(); requestAnimationFrame(this.loop); }
       }
 
       const game = new Game();
