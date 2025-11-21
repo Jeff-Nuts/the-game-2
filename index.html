@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Neon Square - 8-Directional Dash</title>
+    <title>Neon Square - Enemy Fix</title>
     <style>
       /* --- RESET & LAYOUT --- */
       * {
@@ -222,25 +222,25 @@
           GRAVITY: 0.6,
 
           // MOVEMENT
-          RUN_SPEED: 4.0, // Normal walking speed
-          ACCEL: 1.5, // How fast we get to run speed
+          RUN_SPEED: 4.0,
+          ACCEL: 1.5,
 
           // MOMENTUM
-          GROUND_FRICTION: 0.8, // Higher = Slippery, Lower = Sticky (0.92 is good for sliding)
-          AIR_RESISTANCE: 1, // Preserves momentum in air (Super Dash)
+          GROUND_FRICTION: 0.8,
+          AIR_RESISTANCE: 0.97,
 
           // WALL
           WALL_SLIDE_SPEED: 2,
           TERMINAL_VELOCITY: 18,
 
           // DASH
-          DASH_SPEED: 18.0, // High burst
-          DASH_DURATION: 10, // Slightly longer to feel the weight
+          DASH_SPEED: 18.0,
+          DASH_DURATION: 10,
           DASH_REGEN_TIME: 30,
 
           // JUMP
           JUMP_POWER: -13,
-          JUMP_CUTOFF: 0.5, // Variable jump height factor
+          JUMP_CUTOFF: 0.5,
         };
 
         static WORLD = {
@@ -249,6 +249,7 @@
         };
 
         static COLORS = {
+          BG: "#0a0a10", // Added BG color to prevent transparency issues
           PLAYER: "#FFFF00",
           PLAYER_EYES: "#000000",
           ENEMY: "#ff0055",
@@ -563,11 +564,8 @@
           this.wallJumps = 3;
           this.health = 100;
           this.maxHealth = 100;
-          
-          // --- MODIFIED: 1 Dash Max ---
           this.dashes = 1;
           this.maxDashes = 1;
-          
           this.isDashing = false;
           this.dashFrameTimer = 0;
           this.lastShotTime = 0;
@@ -584,47 +582,36 @@
           const P = Config.PHYSICS;
 
           // --- INPUT BUFFERING ---
-          // Coyote Time
           if (this.onGround) {
             this.coyoteTimer = 6;
           } else {
             this.coyoteTimer--;
           }
-
-          // Jump Buffer
           if (input.isPressed("w")) {
             this.jumpBufferTimer = 5;
           } else {
             this.jumpBufferTimer--;
           }
 
-          // 1. VARIABLE JUMP HEIGHT
+          // VARIABLE JUMP HEIGHT
           if (!input.isDown("w") && this.dy < -3 && !this.isDashing) {
             this.dy *= P.JUMP_CUTOFF;
           }
 
-          // --- MODIFIED: Removed Time-Based Dash Regen ---
-          // (The block checking dashCooldownTimer was removed here)
-
-          // 2. DASH ACTIVATION
+          // DASH ACTIVATION
           if (input.isPressed("shift") && this.dashes > 0 && !this.isDashing) {
             this.isDashing = true;
             this.dashes--;
             this.dashFrameTimer = P.DASH_DURATION;
-            // cooldown timer reset removed as it's no longer needed
 
-            // Determine Direction
             let dx = 0;
             let dy = 0;
             if (input.isDown("w")) dy = -1;
             if (input.isDown("s")) dy = 1;
             if (input.isDown("a")) dx = -1;
             if (input.isDown("d")) dx = 1;
-
-            // Default to facing
             if (dx === 0 && dy === 0) dx = this.facing === "left" ? -1 : 1;
 
-            // Normalize
             const len = Math.sqrt(dx * dx + dy * dy);
             if (len !== 0) {
               dx /= len;
@@ -632,8 +619,6 @@
             }
 
             this.dashDir = { x: dx, y: dy };
-
-            // APPLY INSTANT VELOCITY
             this.dx = this.dashDir.x * P.DASH_SPEED;
             this.dy = this.dashDir.y * P.DASH_SPEED;
 
@@ -648,11 +633,9 @@
             );
           }
 
-          // 3. PHYSICS ENGINE
+          // PHYSICS ENGINE
           if (this.isDashing) {
-            // --- DASH STATE ---
             this.dashFrameTimer--;
-
             this.dx = this.dashDir.x * P.DASH_SPEED;
             this.dy = this.dashDir.y * P.DASH_SPEED;
 
@@ -666,20 +649,17 @@
               );
             }
 
-            // END OF DASH
             if (this.dashFrameTimer <= 0) {
               this.isDashing = false;
               this.dx *= 0.8;
               this.dy *= 0.5;
             }
 
-            // Dash Collision Check
             let nextX = this.x + this.dx;
             let nextY = this.y + this.dy;
             let hitWall = false;
             let hitFloor = false;
 
-            // Check X
             for (const plat of context.level.platforms) {
               if (
                 Utils.checkAABB(
@@ -693,7 +673,6 @@
               }
             }
 
-            // Check Y
             for (const plat of context.level.platforms) {
               if (
                 Utils.checkAABB(
@@ -712,10 +691,7 @@
               }
             }
 
-            if (hitWall) {
-              this.isDashing = false;
-            }
-
+            if (hitWall) this.isDashing = false;
             if (hitFloor) {
               this.isDashing = false;
               this.onGround = true;
@@ -724,9 +700,7 @@
             this.x = nextX;
             this.y = nextY;
           } else {
-            // --- NORMAL STATE ---
-
-            // Movement Logic
+            // NORMAL STATE
             let dir = 0;
             if (input.isDown("a")) {
               dir = -1;
@@ -752,7 +726,6 @@
               if (Math.abs(this.dx) < 0.1) this.dx = 0;
             }
 
-            // Jumping (Buffered)
             if (this.jumpBufferTimer > 0 && this.coyoteTimer > 0) {
               this._jump(context, false);
               this.jumpBufferTimer = 0;
@@ -761,10 +734,10 @@
 
             this.updatePhysics(context.level, context);
 
-            // --- MODIFIED: REFILL DASH ON GROUND ---
+            // REFILL DASH ON GROUND
             if (this.onGround) {
               this.wallJumps = this.wallJumpsMax;
-              this.dashes = this.maxDashes; // <--- Reset Dash Here
+              this.dashes = this.maxDashes; 
             }
 
             if (this.onWall && this.wallJumps > 0) {
@@ -772,7 +745,6 @@
             }
           }
 
-          // 5. COMBAT & BOUNDS
           if (input.mouse.down) {
             const now = Date.now();
             if (now - this.lastShotTime > this.shootCooldown) {
@@ -791,9 +763,10 @@
           const P = Config.PHYSICS;
 
           if (isWall) {
-            // --- WALL JUMP ---
-            const input = context.input;
+            // --- REGENERATE DASH ON WALL JUMP ---
+            this.dashes = this.maxDashes;
 
+            const input = context.input;
             if (this.isDashing && this.dashDir.y < 0) {
               this.isDashing = false;
               this.dy = P.JUMP_POWER * 1.3;
@@ -804,7 +777,6 @@
               this.dy = P.JUMP_POWER;
               this.dx = this.onWall === "left" ? 6 : -6;
             }
-
             this.wallJumps--;
             this.facing = this.onWall === "left" ? "right" : "left";
             context.particles.emitDust(
@@ -812,17 +784,13 @@
               this.y + this.height / 2
             );
           } else {
-            // --- GROUND JUMP ---
             if (this.isDashing) {
               this.isDashing = false;
-
               if (this.dashDir.y > 0) {
-                // HYPER DASH (Wave Dash)
                 this.dy = P.JUMP_POWER * 0.6;
                 this.dx *= 1.2;
                 this.dashes = this.maxDashes;
               } else {
-                // SUPER DASH
                 this.dy = P.JUMP_POWER;
               }
             } else {
@@ -894,7 +862,7 @@
           this.hitFlashTimer = 0;
         }
         update(context, player) {
-          this.dx *= Config.PHYSICS.FRICTION;
+          this.dx *= Config.PHYSICS.FRICTION || 0.8;
           this.updatePhysics(context.level, context);
         }
         takeDamage(amount) {
@@ -1020,7 +988,8 @@
 
         reset() {
           this.player = new Player();
-          this.enemies = [new Enemy(600, 370)];
+          // *** SPAWN ENEMY CLOSER TO PLAYER (on platform to the right) ***
+          this.enemies = [new Enemy(450, 900)];
           this.bullets = [];
         }
 
