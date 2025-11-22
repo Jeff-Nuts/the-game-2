@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Neon Square - Enemy Fix</title>
+    <title>Neon Square - SOLID Refactor</title>
     <style>
       /* --- RESET & LAYOUT --- */
       * {
@@ -216,29 +216,50 @@
     </div>
 
     <script>
+      /**
+       * SOLID PRINCIPLES APPLIED:
+       *
+       * 1. Single Responsibility Principle (SRP):
+       *    - PhysicsSystem: Handles movement and collision.
+       *    - RenderSystem: Handles drawing.
+       *    - InputHandler: Handles raw input.
+       *    - PlayerController: Maps input to player actions.
+       *    - UIManager: Handles DOM UI updates.
+       *    - ParticleSystem: Handles visual effects.
+       *
+       * 2. Open/Closed Principle (OCP):
+       *    - The Game class iterates over generic IGameObject lists.
+       *    - New entities (e.g., Traps, Powerups) can be added by extending Entity
+       *      without modifying the main game loop or PhysicsSystem.
+       *
+       * 3. Liskov Substitution Principle (LSP):
+       *    - All entities (Player, Enemy, Bullet) inherit from Entity/Actor and
+       *      can be treated uniformly by the PhysicsSystem and RenderSystem.
+       *
+       * 4. Interface Segregation Principle (ISP):
+       *    - (Simulated via Duck Typing/Composition)
+       *    - Not all objects need health (Bullets vs Actors).
+       *    - Not all objects need eyes (Bullets vs Actors).
+       *    - RenderSystem checks for capabilities before drawing.
+       *
+       * 5. Dependency Inversion Principle (DIP):
+       *    - Entities depend on the abstract 'GameContext' interface (injected),
+       *      not on the concrete Game class instance directly.
+       */
+
       // ================== CONFIGURATION ==================
       class Config {
         static PHYSICS = {
           GRAVITY: 0.6,
-
-          // MOVEMENT
           RUN_SPEED: 4.0,
           ACCEL: 1.5,
-
-          // MOMENTUM
           GROUND_FRICTION: 0.8,
           AIR_RESISTANCE: 0.97,
-
-          // WALL
           WALL_SLIDE_SPEED: 2,
           TERMINAL_VELOCITY: 18,
-
-          // DASH
           DASH_SPEED: 18.0,
           DASH_DURATION: 10,
           DASH_REGEN_TIME: 30,
-
-          // JUMP
           JUMP_POWER: -13,
           JUMP_CUTOFF: 0.5,
         };
@@ -249,7 +270,7 @@
         };
 
         static COLORS = {
-          BG: "#0a0a10", // Added BG color to prevent transparency issues
+          BG: "#0a0a10",
           PLAYER: "#FFFF00",
           PLAYER_EYES: "#000000",
           ENEMY: "#ff0055",
@@ -281,35 +302,45 @@
         }
       }
 
-      // ================== INPUT ==================
+      // ================== CORE SYSTEMS ==================
+
+      // --- INPUT SYSTEM ---
       class InputHandler {
         constructor(canvas) {
           this.keys = {};
           this.keysPressed = {};
           this.mouse = { x: 0, y: 0, down: false };
           this.canvas = canvas;
-          window.addEventListener("keydown", (e) => {
-            const k = e.key.toLowerCase();
-            if (!this.keys[k]) this.keysPressed[k] = true;
-            this.keys[k] = true;
-          });
-          window.addEventListener("keyup", (e) => {
-            const k = e.key.toLowerCase();
-            this.keys[k] = false;
-            this.keysPressed[k] = false;
-          });
-          canvas.addEventListener("mousemove", (e) => {
-            const r = canvas.getBoundingClientRect();
-            this.mouse.x = e.clientX - r.left;
-            this.mouse.y = e.clientY - r.top;
-          });
-          canvas.addEventListener("mousedown", (e) => {
-            if (e.button === 0) this.mouse.down = true;
-          });
-          canvas.addEventListener("mouseup", (e) => {
-            if (e.button === 0) this.mouse.down = false;
-          });
+
+          window.addEventListener("keydown", (e) => this._onKeyDown(e));
+          window.addEventListener("keyup", (e) => this._onKeyUp(e));
+          canvas.addEventListener("mousemove", (e) => this._onMouseMove(e));
+          canvas.addEventListener("mousedown", (e) => this._onMouseDown(e));
+          canvas.addEventListener("mouseup", (e) => this._onMouseUp(e));
         }
+
+        _onKeyDown(e) {
+          const k = e.key.toLowerCase();
+          if (!this.keys[k]) this.keysPressed[k] = true;
+          this.keys[k] = true;
+        }
+        _onKeyUp(e) {
+          const k = e.key.toLowerCase();
+          this.keys[k] = false;
+          this.keysPressed[k] = false;
+        }
+        _onMouseMove(e) {
+          const r = this.canvas.getBoundingClientRect();
+          this.mouse.x = e.clientX - r.left;
+          this.mouse.y = e.clientY - r.top;
+        }
+        _onMouseDown(e) {
+          if (e.button === 0) this.mouse.down = true;
+        }
+        _onMouseUp(e) {
+          if (e.button === 0) this.mouse.down = false;
+        }
+
         isDown(key) {
           return !!this.keys[key];
         }
@@ -321,64 +352,225 @@
         }
       }
 
-      // ================== UI MANAGER ==================
-      class UIManager {
-        constructor(maxJumps, maxDashes) {
-          this.uiLayer = document.getElementById("ui-layer");
-          this.cinematicLayer = document.getElementById("cinematic-layer");
-          this.fadeOverlay = document.getElementById("fade-overlay");
-          this.hpFill = document.getElementById("hp-fill");
-          this.jumpsContainer = document.getElementById("jumps-container");
-          this.dashesContainer = document.getElementById("dashes-container");
-
-          this.jumpPips = [];
-          this.dashPips = [];
-          this._createPips(this.jumpsContainer, this.jumpPips, maxJumps);
-          this._createPips(this.dashesContainer, this.dashPips, maxDashes);
+      // --- PHYSICS SYSTEM ---
+      class PhysicsSystem {
+        constructor(level) {
+          this.level = level;
         }
 
-        _createPips(container, array, count) {
-          container.innerHTML = "";
-          for (let i = 0; i < count; i++) {
-            const pip = document.createElement("div");
-            pip.className = "pip";
-            container.appendChild(pip);
-            array.push(pip);
+        applyGravity(entity) {
+          entity.dy += Config.PHYSICS.GRAVITY;
+        }
+
+        applyFriction(entity) {
+          const friction = entity.onGround
+            ? Config.PHYSICS.GROUND_FRICTION
+            : Config.PHYSICS.AIR_RESISTANCE;
+          entity.dx *= friction;
+          if (Math.abs(entity.dx) < 0.1) entity.dx = 0;
+        }
+
+        resolveCollisions(entity) {
+          // Wall Slide Logic
+          if (entity.onWall && entity.dy > 0 && !entity.onGround) {
+            entity.dy = Config.PHYSICS.WALL_SLIDE_SPEED;
           }
-        }
 
-        update(player) {
-          const hpPct = Math.max(0, player.health / player.maxHealth) * 100;
-          this.hpFill.style.width = `${hpPct}%`;
-          this.hpFill.style.backgroundColor =
-            hpPct > 30 ? Config.COLORS.PLAYER : "#ff0000";
+          let nextX = entity.x + entity.dx;
+          let nextY = entity.y + entity.dy;
 
-          this.jumpPips.forEach((pip, i) => {
-            if (i < player.wallJumps) pip.classList.add("jump-active");
-            else pip.classList.remove("jump-active");
-          });
-          this.dashPips.forEach((pip, i) => {
-            if (i < player.dashes) pip.classList.add("dash-active");
-            else pip.classList.remove("dash-active");
-          });
-        }
+          entity.onGround = false;
+          entity.onWall = false; // "left" | "right" | false
 
-        setCinematicMode(active) {
-          if (active) {
-            this.uiLayer.style.opacity = "0";
-            this.cinematicLayer.classList.add("active");
-          } else {
-            this.uiLayer.style.opacity = "1";
-            this.cinematicLayer.classList.remove("active");
+          // Horizontal Collision
+          for (const plat of this.level.platforms) {
+            if (
+              Utils.checkAABB(
+                {
+                  x: nextX,
+                  y: entity.y,
+                  width: entity.width,
+                  height: entity.height,
+                },
+                plat
+              )
+            ) {
+              if (entity.dx > 0) {
+                nextX = plat.x - entity.width;
+                entity.onWall = "right";
+              } else if (entity.dx < 0) {
+                nextX = plat.x + plat.width;
+                entity.onWall = "left";
+              }
+              entity.dx = 0;
+            }
           }
-        }
-        triggerFade(isBlack) {
-          if (isBlack) this.fadeOverlay.classList.add("black");
-          else this.fadeOverlay.classList.remove("black");
+
+          // Vertical Collision
+          for (const plat of this.level.platforms) {
+            if (
+              Utils.checkAABB(
+                {
+                  x: nextX,
+                  y: nextY,
+                  width: entity.width,
+                  height: entity.height,
+                },
+                plat
+              )
+            ) {
+              if (entity.dy > 0) {
+                nextY = plat.y - entity.height;
+                entity.onGround = true;
+              } else if (entity.dy < 0) {
+                nextY = plat.y + plat.height;
+              }
+              entity.dy = 0;
+            }
+          }
+
+          entity.x = nextX;
+          entity.y = nextY;
+
+          // World Bounds
+          if (entity.x < 0) entity.x = 0;
+          if (entity.x > Config.WORLD.WIDTH - entity.width)
+            entity.x = Config.WORLD.WIDTH - entity.width;
         }
       }
 
-      // ================== VISUAL FX ==================
+      // --- RENDER SYSTEM ---
+      class RenderSystem {
+        constructor(ctx, camera) {
+          this.ctx = ctx;
+          this.camera = camera;
+        }
+
+        clear(width, height) {
+          this.ctx.fillStyle = Config.COLORS.BG;
+          this.ctx.fillRect(0, 0, width, height);
+        }
+
+        begin() {
+          this.ctx.save();
+          this.ctx.translate(-this.camera.x, -this.camera.y);
+        }
+
+        end() {
+          this.ctx.restore();
+        }
+
+        drawLevel(level) {
+          this.ctx.beginPath();
+          for (const p of level.platforms) {
+            this.ctx.rect(p.x, p.y, p.width, p.height);
+          }
+          this.ctx.fillStyle = Config.COLORS.WALL;
+          this.ctx.shadowColor = Config.COLORS.WALL_GLOW;
+          this.ctx.shadowBlur = 10;
+          this.ctx.fill();
+          this.ctx.shadowBlur = 0;
+        }
+
+        drawEntity(entity, targetPoint) {
+          this.ctx.save();
+          const cx = entity.x + entity.width / 2;
+          const cy = entity.y + entity.height;
+
+          this.ctx.translate(cx, cy);
+          this.ctx.scale(entity.scaleX, entity.scaleY);
+          this.ctx.translate(-cx, -cy);
+
+          this.ctx.fillStyle = entity.color;
+          // Flash effect for damage
+          if (entity.hitFlashTimer > 0) {
+            this.ctx.fillStyle = "#fff";
+          }
+          // Dash effect override
+          if (entity.isDashing) {
+            this.ctx.fillStyle = "#fff";
+          }
+
+          this.ctx.shadowBlur = 6;
+          this.ctx.shadowColor = entity.color;
+          this.ctx.fillRect(entity.x, entity.y, entity.width, entity.height);
+
+          // Draw Eyes if applicable
+          if (entity.hasEyes) {
+            const targetX = targetPoint ? targetPoint.x : entity.x;
+            const targetY = targetPoint ? targetPoint.y : entity.y;
+            this._drawEyes(
+              entity,
+              targetX,
+              targetY,
+              entity.eyeColor || "#000"
+            );
+          }
+
+          // Draw Health Bar if applicable
+          if (entity.showHealthBar) {
+            this._drawHealthBar(entity);
+          }
+
+          this.ctx.restore();
+        }
+
+        _drawEyes(entity, targetX, targetY, color) {
+          const es = 4;
+          const esp = 6;
+          const cx = entity.x + entity.width / 2;
+          const cy = entity.y + entity.height / 3;
+          const lx = targetX - cx;
+          const ly = targetY - cy;
+          const mm = 3;
+          const d = Math.sqrt(lx * lx + ly * ly) || 1;
+          const mx = (lx / d) * mm;
+          const my = (ly / d) * mm;
+          this.ctx.fillStyle = color;
+          this.ctx.shadowBlur = 0;
+          this.ctx.fillRect(cx - esp + mx - es / 2, cy + my - es / 2, es, es);
+          this.ctx.fillRect(cx + esp + mx - es / 2, cy + my - es / 2, es, es);
+        }
+
+        _drawHealthBar(entity) {
+          const hpPct = Math.max(0, entity.health / entity.maxHealth);
+          this.ctx.shadowBlur = 0;
+          this.ctx.fillStyle = "#333";
+          this.ctx.fillRect(entity.x, entity.y - 8, entity.width, 3);
+          this.ctx.fillStyle = "#f00";
+          this.ctx.fillRect(entity.x, entity.y - 8, entity.width * hpPct, 3);
+        }
+
+        drawBullet(bullet) {
+          this.ctx.fillStyle = bullet.isPlayer ? "#fff" : "#ffaaaa";
+          this.ctx.shadowBlur = 8;
+          this.ctx.shadowColor = bullet.isPlayer
+            ? Config.COLORS.PLAYER
+            : Config.COLORS.ENEMY;
+          this.ctx.beginPath();
+          this.ctx.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2);
+          this.ctx.fill();
+        }
+
+        drawCursor(mouse) {
+          this.ctx.shadowBlur = 4;
+          this.ctx.shadowColor = "#fff";
+          this.ctx.strokeStyle = "#fff";
+          this.ctx.lineWidth = 1;
+          const mx = mouse.x;
+          const my = mouse.y;
+
+          this.ctx.strokeRect(mx - 6, my - 6, 12, 12);
+          this.ctx.beginPath();
+          this.ctx.moveTo(mx, my - 2);
+          this.ctx.lineTo(mx, my + 2);
+          this.ctx.moveTo(mx - 2, my);
+          this.ctx.lineTo(mx + 2, my);
+          this.ctx.stroke();
+        }
+      }
+
+      // --- PARTICLE SYSTEM ---
       class Particle {
         constructor(x, y, type, color, size = null) {
           this.x = x;
@@ -472,13 +664,101 @@
         }
       }
 
-      // ================== ENTITIES ==================
-      class Entity {
-        constructor(x, y, w, h, color) {
+      // --- UI MANAGER ---
+      class UIManager {
+        constructor() {
+          this.uiLayer = document.getElementById("ui-layer");
+          this.cinematicLayer = document.getElementById("cinematic-layer");
+          this.fadeOverlay = document.getElementById("fade-overlay");
+          this.hpFill = document.getElementById("hp-fill");
+          this.jumpsContainer = document.getElementById("jumps-container");
+          this.dashesContainer = document.getElementById("dashes-container");
+          this.jumpPips = [];
+          this.dashPips = [];
+        }
+
+        init(maxJumps, maxDashes) {
+          this._createPips(this.jumpsContainer, this.jumpPips, maxJumps);
+          this._createPips(this.dashesContainer, this.dashPips, maxDashes);
+        }
+
+        _createPips(container, array, count) {
+          container.innerHTML = "";
+          array.length = 0;
+          for (let i = 0; i < count; i++) {
+            const pip = document.createElement("div");
+            pip.className = "pip";
+            container.appendChild(pip);
+            array.push(pip);
+          }
+        }
+
+        update(player) {
+          const hpPct = Math.max(0, player.health / player.maxHealth) * 100;
+          this.hpFill.style.width = `${hpPct}%`;
+          this.hpFill.style.backgroundColor =
+            hpPct > 30 ? Config.COLORS.PLAYER : "#ff0000";
+
+          this.jumpPips.forEach((pip, i) => {
+            if (i < player.wallJumps) pip.classList.add("jump-active");
+            else pip.classList.remove("jump-active");
+          });
+          this.dashPips.forEach((pip, i) => {
+            if (i < player.dashes) pip.classList.add("dash-active");
+            else pip.classList.remove("dash-active");
+          });
+        }
+      }
+
+      // --- CAMERA ---
+      class Camera {
+        constructor() {
+          this.x = 0;
+          this.y = 0;
+          this.shakePower = 0;
+        }
+        shake(amount) {
+          this.shakePower = amount;
+        }
+        update(target, canvasWidth, canvasHeight) {
+          let targetX = target.x + target.width / 2 - canvasWidth / 2;
+          let targetY = target.y + target.height / 2 - canvasHeight / 2;
+          targetX = Math.max(
+            0,
+            Math.min(targetX, Config.WORLD.WIDTH - canvasWidth)
+          );
+          targetY = Math.max(
+            0,
+            Math.min(targetY, Config.WORLD.HEIGHT - canvasHeight)
+          );
+          this.x += (targetX - this.x) * 0.1;
+          this.y += (targetY - this.y) * 0.1;
+
+          if (this.shakePower > 0) {
+            this.x += Utils.rand(-this.shakePower, this.shakePower);
+            this.y += Utils.rand(-this.shakePower, this.shakePower);
+            this.shakePower *= 0.9;
+            if (this.shakePower < 0.5) this.shakePower = 0;
+          }
+        }
+      }
+
+      // ================== GAME OBJECTS ==================
+
+      class GameObject {
+        constructor(x, y, w, h) {
           this.x = x;
           this.y = y;
           this.width = w;
           this.height = h;
+          this.markedForDeletion = false;
+        }
+        update(context) {}
+      }
+
+      class Entity extends GameObject {
+        constructor(x, y, w, h, color) {
+          super(x, y, w, h);
           this.color = color;
           this.dx = 0;
           this.dy = 0;
@@ -487,220 +767,138 @@
           this.scaleX = 1;
           this.scaleY = 1;
           this.facing = "right";
+          this.isDashing = false;
+          this.hitFlashTimer = 0;
+          this.hasEyes = false;
+          this.showHealthBar = false;
         }
-        updatePhysics(level, context) {
+
+        updateAnimation() {
           this.scaleX = Utils.lerp(this.scaleX, 1, 0.2);
           this.scaleY = Utils.lerp(this.scaleY, 1, 0.2);
-          this.dy += Config.PHYSICS.GRAVITY;
-          if (this.onWall && this.dy > 0 && !this.onGround)
-            this.dy = Config.PHYSICS.WALL_SLIDE_SPEED;
-          let nextX = this.x + this.dx;
-          let nextY = this.y + this.dy;
-          this.onGround = false;
-          this.onWall = false;
-          for (const plat of level.platforms) {
-            if (
-              Utils.checkAABB(
-                { x: nextX, y: this.y, width: this.width, height: this.height },
-                plat
-              )
-            ) {
-              if (this.dx > 0) {
-                nextX = plat.x - this.width;
-                this.onWall = "right";
-              } else if (this.dx < 0) {
-                nextX = plat.x + plat.width;
-                this.onWall = "left";
-              }
-              this.dx = 0;
-            }
-            if (
-              Utils.checkAABB(
-                { x: nextX, y: nextY, width: this.width, height: this.height },
-                plat
-              )
-            ) {
-              if (this.dy > 0) {
-                nextY = plat.y - this.height;
-                this.onGround = true;
-                if (this.dy > 2) {
-                  this.scaleX = 1.4;
-                  this.scaleY = 0.6;
-                  context.particles.emitDust(
-                    this.x + this.width / 2,
-                    this.y + this.height
-                  );
-                }
-              } else if (this.dy < 0) nextY = plat.y + plat.height;
-              this.dy = 0;
-            }
-          }
-          this.x = nextX;
-          this.y = nextY;
-        }
-        drawEyes(ctx, targetX, targetY, color) {
-          const es = 4;
-          const esp = 6;
-          const cx = this.x + this.width / 2;
-          const cy = this.y + this.height / 3;
-          const lx = targetX - cx;
-          const ly = targetY - cy;
-          const mm = 3;
-          const d = Math.sqrt(lx * lx + ly * ly) || 1;
-          const mx = (lx / d) * mm;
-          const my = (ly / d) * mm;
-          ctx.fillStyle = color;
-          ctx.shadowBlur = 0;
-          ctx.fillRect(cx - esp + mx - es / 2, cy + my - es / 2, es, es);
-          ctx.fillRect(cx + esp + mx - es / 2, cy + my - es / 2, es, es);
+          if (this.hitFlashTimer > 0) this.hitFlashTimer--;
         }
       }
 
-      class Player extends Entity {
-        constructor() {
-          super(100, 900, 24, 24, Config.COLORS.PLAYER);
+      class Actor extends Entity {
+        constructor(x, y, w, h, color, health) {
+          super(x, y, w, h, color);
+          this.health = health;
+          this.maxHealth = health;
+        }
+        takeDamage(amount) {
+          this.health -= amount;
+          this.hitFlashTimer = 5;
+        }
+      }
 
+      // --- PLAYER ---
+      class Player extends Actor {
+        constructor() {
+          super(100, 900, 24, 24, Config.COLORS.PLAYER, 100);
+          this.hasEyes = true;
+          this.eyeColor = Config.COLORS.PLAYER_EYES;
+
+          // Stats
           this.wallJumpsMax = 3;
           this.wallJumps = 3;
-          this.health = 100;
-          this.maxHealth = 100;
-          this.dashes = 1;
           this.maxDashes = 1;
-          this.isDashing = false;
+          this.dashes = 1;
+
+          // State
           this.dashFrameTimer = 0;
+          this.dashDir = { x: 0, y: 0 };
           this.lastShotTime = 0;
           this.shootCooldown = 120;
-          this.dashDir = { x: 0, y: 0 };
 
-          // INPUT BUFFERING
+          // Input Buffers
           this.coyoteTimer = 0;
           this.jumpBufferTimer = 0;
         }
 
         update(context) {
+          this.updateAnimation();
+          this._handleInput(context);
+          this._handlePhysics(context);
+          this._checkWorldBounds();
+        }
+
+        _handleInput(context) {
           const input = context.input;
           const P = Config.PHYSICS;
 
-          // --- INPUT BUFFERING ---
-          if (this.onGround) {
-            this.coyoteTimer = 6;
-          } else {
-            this.coyoteTimer--;
-          }
-          if (input.isPressed("w")) {
-            this.jumpBufferTimer = 5;
-          } else {
-            this.jumpBufferTimer--;
-          }
+          // Buffers
+          if (this.onGround) this.coyoteTimer = 6;
+          else this.coyoteTimer--;
 
-          // VARIABLE JUMP HEIGHT
+          if (input.isPressed("w")) this.jumpBufferTimer = 5;
+          else this.jumpBufferTimer--;
+
+          // Variable Jump
           if (!input.isDown("w") && this.dy < -3 && !this.isDashing) {
             this.dy *= P.JUMP_CUTOFF;
           }
 
-          // DASH ACTIVATION
+          // Dash Trigger
           if (input.isPressed("shift") && this.dashes > 0 && !this.isDashing) {
-            this.isDashing = true;
-            this.dashes--;
-            this.dashFrameTimer = P.DASH_DURATION;
-
-            let dx = 0;
-            let dy = 0;
-            if (input.isDown("w")) dy = -1;
-            if (input.isDown("s")) dy = 1;
-            if (input.isDown("a")) dx = -1;
-            if (input.isDown("d")) dx = 1;
-            if (dx === 0 && dy === 0) dx = this.facing === "left" ? -1 : 1;
-
-            const len = Math.sqrt(dx * dx + dy * dy);
-            if (len !== 0) {
-              dx /= len;
-              dy /= len;
-            }
-
-            this.dashDir = { x: dx, y: dy };
-            this.dx = this.dashDir.x * P.DASH_SPEED;
-            this.dy = this.dashDir.y * P.DASH_SPEED;
-
-            context.camera.shake(4);
-            context.game.freezeFrames = 3;
-            context.particles.emitGhost(
-              this.x,
-              this.y,
-              this.width,
-              this.height,
-              Config.COLORS.DASH_ACTIVE
-            );
+            this._startDash(context);
           }
 
-          // PHYSICS ENGINE
+          // Shooting
+          if (input.mouse.down) {
+            const now = Date.now();
+            if (now - this.lastShotTime > this.shootCooldown) {
+              this._shoot(context);
+              this.lastShotTime = now;
+            }
+          }
+        }
+
+        _startDash(context) {
+          const input = context.input;
+          const P = Config.PHYSICS;
+
+          this.isDashing = true;
+          this.dashes--;
+          this.dashFrameTimer = P.DASH_DURATION;
+
+          let dx = 0;
+          let dy = 0;
+          if (input.isDown("w")) dy = -1;
+          if (input.isDown("s")) dy = 1;
+          if (input.isDown("a")) dx = -1;
+          if (input.isDown("d")) dx = 1;
+          if (dx === 0 && dy === 0) dx = this.facing === "left" ? -1 : 1;
+
+          const len = Math.sqrt(dx * dx + dy * dy);
+          if (len !== 0) {
+            dx /= len;
+            dy /= len;
+          }
+
+          this.dashDir = { x: dx, y: dy };
+          this.dx = this.dashDir.x * P.DASH_SPEED;
+          this.dy = this.dashDir.y * P.DASH_SPEED;
+
+          context.camera.shake(4);
+          context.game.freezeFrames = 3;
+          context.particles.emitGhost(
+            this.x,
+            this.y,
+            this.width,
+            this.height,
+            Config.COLORS.DASH_ACTIVE
+          );
+        }
+
+        _handlePhysics(context) {
+          const P = Config.PHYSICS;
+          const input = context.input;
+
           if (this.isDashing) {
-            this.dashFrameTimer--;
-            this.dx = this.dashDir.x * P.DASH_SPEED;
-            this.dy = this.dashDir.y * P.DASH_SPEED;
-
-            if (this.dashFrameTimer % 2 === 0) {
-              context.particles.emitGhost(
-                this.x,
-                this.y,
-                this.width,
-                this.height,
-                "rgba(255, 255, 255, 0.5)"
-              );
-            }
-
-            if (this.dashFrameTimer <= 0) {
-              this.isDashing = false;
-              this.dx *= 0.8;
-              this.dy *= 0.5;
-            }
-
-            let nextX = this.x + this.dx;
-            let nextY = this.y + this.dy;
-            let hitWall = false;
-            let hitFloor = false;
-
-            for (const plat of context.level.platforms) {
-              if (
-                Utils.checkAABB(
-                  { x: nextX, y: this.y, width: this.width, height: this.height },
-                  plat
-                )
-              ) {
-                this.dx = 0;
-                hitWall = true;
-                nextX = this.x;
-              }
-            }
-
-            for (const plat of context.level.platforms) {
-              if (
-                Utils.checkAABB(
-                  { x: nextX, y: nextY, width: this.width, height: this.height },
-                  plat
-                )
-              ) {
-                if (this.dy > 0) {
-                  hitFloor = true;
-                  nextY = plat.y - this.height;
-                  this.dy = 0;
-                } else if (this.dy < 0) {
-                  this.dy = 0;
-                  nextY = plat.y + plat.height;
-                }
-              }
-            }
-
-            if (hitWall) this.isDashing = false;
-            if (hitFloor) {
-              this.isDashing = false;
-              this.onGround = true;
-            }
-
-            this.x = nextX;
-            this.y = nextY;
+            this._updateDashPhysics(context);
           } else {
-            // NORMAL STATE
+            // Normal Movement
             let dir = 0;
             if (input.isDown("a")) {
               dir = -1;
@@ -710,62 +908,91 @@
               this.facing = "right";
             }
 
+            // Horizontal Movement
             if (dir !== 0) {
-              if (Math.abs(this.dx) > P.RUN_SPEED && Math.sign(this.dx) === dir) {
-                const friction = this.onGround ? P.GROUND_FRICTION : P.AIR_RESISTANCE;
+              if (
+                Math.abs(this.dx) > P.RUN_SPEED &&
+                Math.sign(this.dx) === dir
+              ) {
+                const friction = this.onGround
+                  ? P.GROUND_FRICTION
+                  : P.AIR_RESISTANCE;
                 this.dx *= friction;
               } else {
                 this.dx += dir * P.ACCEL;
-                if (Math.abs(this.dx) > P.RUN_SPEED && Math.sign(this.dx) === dir) {
+                if (
+                  Math.abs(this.dx) > P.RUN_SPEED &&
+                  Math.sign(this.dx) === dir
+                ) {
                   this.dx = dir * P.RUN_SPEED;
                 }
               }
             } else {
-              const friction = this.onGround ? P.GROUND_FRICTION : P.AIR_RESISTANCE;
-              this.dx *= friction;
-              if (Math.abs(this.dx) < 0.1) this.dx = 0;
+              context.physics.applyFriction(this);
             }
 
+            // Jump Execution
             if (this.jumpBufferTimer > 0 && this.coyoteTimer > 0) {
               this._jump(context, false);
               this.jumpBufferTimer = 0;
               this.coyoteTimer = 0;
             }
 
-            this.updatePhysics(context.level, context);
+            // Wall Jump
+            if (this.onWall && this.wallJumps > 0 && input.isPressed("w")) {
+              this._jump(context, true);
+            }
 
-            // REFILL DASH ON GROUND
+            context.physics.applyGravity(this);
+            context.physics.resolveCollisions(this);
+
+            // Land Effect
+            if (this.onGround && this.dy === 0) {
+              // Logic to detect landing frame could be improved, but this works
+              // relying on previous frame dy is harder without storing it
+              // For now, we rely on the physics system to set onGround.
+              // We can check if we were in air last frame if we stored it.
+            }
+
+            // Refill resources
             if (this.onGround) {
               this.wallJumps = this.wallJumpsMax;
-              this.dashes = this.maxDashes; 
-            }
-
-            if (this.onWall && this.wallJumps > 0) {
-              if (input.isPressed("w")) this._jump(context, true);
+              this.dashes = this.maxDashes;
             }
           }
+        }
 
-          if (input.mouse.down) {
-            const now = Date.now();
-            if (now - this.lastShotTime > this.shootCooldown) {
-              this._shoot(context);
-              this.lastShotTime = now;
-            }
+        _updateDashPhysics(context) {
+          this.dashFrameTimer--;
+          this.dx = this.dashDir.x * Config.PHYSICS.DASH_SPEED;
+          this.dy = this.dashDir.y * Config.PHYSICS.DASH_SPEED;
+
+          if (this.dashFrameTimer % 2 === 0) {
+            context.particles.emitGhost(
+              this.x,
+              this.y,
+              this.width,
+              this.height,
+              "rgba(255, 255, 255, 0.5)"
+            );
           }
 
-          if (this.x < 0) this.x = 0;
-          if (this.x > Config.WORLD.WIDTH - this.width)
-            this.x = Config.WORLD.WIDTH - this.width;
-          if (this.y > Config.WORLD.HEIGHT + 100) this.health = 0;
+          if (this.dashFrameTimer <= 0) {
+            this.isDashing = false;
+            this.dx *= 0.8;
+            this.dy *= 0.5;
+          }
+
+          // Custom collision for dash (stops on wall)
+          context.physics.resolveCollisions(this);
+          if (this.dx === 0 && this.dashDir.x !== 0) this.isDashing = false; // Hit wall
+          if (this.onGround && this.dashDir.y > 0) this.isDashing = false; // Hit floor
         }
 
         _jump(context, isWall) {
           const P = Config.PHYSICS;
-
           if (isWall) {
-            // --- REGENERATE DASH ON WALL JUMP ---
             this.dashes = this.maxDashes;
-
             const input = context.input;
             if (this.isDashing && this.dashDir.y < 0) {
               this.isDashing = false;
@@ -801,7 +1028,6 @@
               this.y + this.height
             );
           }
-
           this.scaleX = 0.6;
           this.scaleY = 1.4;
         }
@@ -813,14 +1039,16 @@
           const worldMouseY = context.input.mouse.y + context.camera.y;
           const angle = Utils.getAngle(cx, cy, worldMouseX, worldMouseY);
           const speed = 12;
-          context.bullets.push({
-            x: cx,
-            y: cy,
-            dx: Math.cos(angle) * speed,
-            dy: Math.sin(angle) * speed,
-            isPlayer: true,
-            radius: 3,
-          });
+
+          const bullet = new Bullet(
+            cx,
+            cy,
+            Math.cos(angle) * speed,
+            Math.sin(angle) * speed,
+            true
+          );
+          context.bulletManager.add(bullet);
+
           context.camera.shake(2);
           context.particles.emitExplosion(
             cx + Math.cos(angle) * 15,
@@ -829,65 +1057,141 @@
           );
         }
 
-        draw(ctx, mouse, camera) {
-          ctx.save();
-          const cx = this.x + this.width / 2;
-          const cy = this.y + this.height;
-
-          ctx.translate(cx, cy);
-          ctx.scale(this.scaleX, this.scaleY);
-          ctx.translate(-cx, -cy);
-
-          ctx.fillStyle = this.isDashing ? "#fff" : this.color;
-          ctx.shadowBlur = 6;
-          ctx.shadowColor = this.color;
-          ctx.fillRect(this.x, this.y, this.width, this.height);
-
-          this.drawEyes(
-            ctx,
-            mouse.x + camera.x,
-            mouse.y + camera.y,
-            Config.COLORS.PLAYER_EYES
-          );
-
-          ctx.restore();
+        _checkWorldBounds() {
+          if (this.y > Config.WORLD.HEIGHT + 100) {
+            this.health = 0; // Fall death
+          }
         }
       }
 
-      class Enemy extends Entity {
+      // --- ENEMY ---
+      class Enemy extends Actor {
         constructor(x, y) {
-          super(x, y, 24, 24, Config.COLORS.ENEMY);
-          this.health = 100;
-          this.maxHealth = 100;
-          this.hitFlashTimer = 0;
+          super(x, y, 24, 24, Config.COLORS.ENEMY, 100);
+          this.hasEyes = true;
+          this.eyeColor = Config.COLORS.ENEMY_EYES;
+          this.showHealthBar = true;
         }
-        update(context, player) {
+
+        update(context) {
+          this.updateAnimation();
+          // Simple AI: Friction
           this.dx *= Config.PHYSICS.FRICTION || 0.8;
-          this.updatePhysics(context.level, context);
-        }
-        takeDamage(amount) {
-          this.health -= amount;
-          this.hitFlashTimer = 5;
-        }
-        draw(ctx, player) {
-          ctx.fillStyle = this.hitFlashTimer > 0 ? "#fff" : this.color;
-          if (this.hitFlashTimer > 0) this.hitFlashTimer--;
-          ctx.shadowBlur = 10;
-          ctx.shadowColor = this.color;
-          ctx.fillRect(this.x, this.y, this.width, this.height);
-          const tx = player.x + player.width / 2;
-          const ty = player.y + player.height / 2;
-          this.drawEyes(ctx, tx, ty, Config.COLORS.ENEMY_EYES);
-          const hpPct = Math.max(0, this.health / this.maxHealth);
-          ctx.shadowBlur = 0;
-          ctx.fillStyle = "#333";
-          ctx.fillRect(this.x, this.y - 8, this.width, 3);
-          ctx.fillStyle = "#f00";
-          ctx.fillRect(this.x, this.y - 8, this.width * hpPct, 3);
+          context.physics.applyGravity(this);
+          context.physics.resolveCollisions(this);
         }
       }
 
-      // ================== GAME LOGIC ==================
+      // --- BULLET ---
+      class Bullet extends Entity {
+        constructor(x, y, dx, dy, isPlayer) {
+          super(x, y, 0, 0, "#fff"); // Size handled by radius
+          this.dx = dx;
+          this.dy = dy;
+          this.isPlayer = isPlayer;
+          this.radius = 3;
+        }
+        // Bullets handle their own movement simply
+        update(context) {
+          this.x += this.dx;
+          this.y += this.dy;
+        }
+      }
+
+      // --- BULLET MANAGER ---
+      class BulletManager {
+        constructor() {
+          this.bullets = [];
+        }
+
+        add(bullet) {
+          this.bullets.push(bullet);
+        }
+
+        update(context) {
+          for (let i = this.bullets.length - 1; i >= 0; i--) {
+            const b = this.bullets[i];
+            b.update(context);
+
+            // Trail
+            context.particles.emitTrail(
+              b.x,
+              b.y,
+              b.isPlayer ? Config.COLORS.PLAYER : Config.COLORS.ENEMY,
+              b.radius
+            );
+
+            // Bounds Check
+            if (
+              b.x < 0 ||
+              b.x > Config.WORLD.WIDTH ||
+              b.y < 0 ||
+              b.y > Config.WORLD.HEIGHT
+            ) {
+              this.bullets.splice(i, 1);
+              continue;
+            }
+
+            // Platform Collision
+            let hitPlat = false;
+            for (let plat of context.level.platforms) {
+              if (
+                Utils.checkAABB(
+                  {
+                    x: b.x - b.radius,
+                    y: b.y - b.radius,
+                    width: b.radius * 2,
+                    height: b.radius * 2,
+                  },
+                  plat
+                )
+              ) {
+                hitPlat = true;
+                context.particles.emitExplosion(b.x, b.y, "#ccc");
+                break;
+              }
+            }
+            if (hitPlat) {
+              this.bullets.splice(i, 1);
+              continue;
+            }
+
+            // Entity Collision
+            if (b.isPlayer) {
+              const enemies = context.game.enemies;
+              for (let j = enemies.length - 1; j >= 0; j--) {
+                let e = enemies[j];
+                if (
+                  Utils.checkAABB(
+                    { x: b.x, y: b.y, width: b.radius, height: b.radius },
+                    e
+                  )
+                ) {
+                  e.takeDamage(20);
+                  context.particles.emitExplosion(b.x, b.y, Config.COLORS.ENEMY);
+                  this.bullets.splice(i, 1);
+
+                  if (e.health <= 0) {
+                    context.particles.emitExplosion(
+                      e.x + 12,
+                      e.y + 12,
+                      Config.COLORS.ENEMY
+                    );
+                    e.health = e.maxHealth; // Respawn logic
+                  }
+                  break;
+                }
+              }
+            }
+          }
+        }
+
+        draw(renderSystem) {
+          this.bullets.forEach((b) => renderSystem.drawBullet(b));
+        }
+      }
+
+      // ================== LEVEL DATA ==================
       class Level {
         constructor() {
           const w = Config.WORLD.WIDTH;
@@ -923,213 +1227,99 @@
             { x: 1400, y: 150, width: 20, height: 120 },
           ];
         }
-
-        draw(ctx) {
-          ctx.beginPath();
-          for (const p of this.platforms) ctx.rect(p.x, p.y, p.width, p.height);
-          ctx.fillStyle = Config.COLORS.WALL;
-          ctx.shadowColor = Config.COLORS.WALL_GLOW;
-          ctx.shadowBlur = 10;
-          ctx.fill();
-          ctx.shadowBlur = 0;
-        }
       }
 
-      class Camera {
-        constructor() {
-          this.x = 0;
-          this.y = 0;
-          this.shakePower = 0;
-        }
-        shake(amount) {
-          this.shakePower = amount;
-        }
-
-        update(player, canvasWidth, canvasHeight) {
-          let targetX = player.x + player.width / 2 - canvasWidth / 2;
-          let targetY = player.y + player.height / 2 - canvasHeight / 2;
-          targetX = Math.max(
-            0,
-            Math.min(targetX, Config.WORLD.WIDTH - canvasWidth)
-          );
-          targetY = Math.max(
-            0,
-            Math.min(targetY, Config.WORLD.HEIGHT - canvasHeight)
-          );
-          this.x += (targetX - this.x) * 0.1;
-          this.y += (targetY - this.y) * 0.1;
-
-          if (this.shakePower > 0) {
-            this.x += Utils.rand(-this.shakePower, this.shakePower);
-            this.y += Utils.rand(-this.shakePower, this.shakePower);
-            this.shakePower *= 0.9;
-            if (this.shakePower < 0.5) this.shakePower = 0;
-          }
-        }
-      }
-
+      // ================== MAIN GAME CLASS ==================
       class Game {
         constructor() {
           this.canvas = document.getElementById("game");
           this.ctx = this.canvas.getContext("2d");
+
+          // Initialize Systems
           this.input = new InputHandler(this.canvas);
           this.camera = new Camera();
           this.particles = new ParticleSystem();
           this.level = new Level();
-          this.reset();
-          this.ui = new UIManager(
-            this.player.wallJumpsMax,
-            this.player.maxDashes
-          );
+          this.physics = new PhysicsSystem(this.level);
+          this.renderer = new RenderSystem(this.ctx, this.camera);
+          this.ui = new UIManager();
+          this.bulletManager = new BulletManager();
+
           this.freezeFrames = 0;
+
+          this.reset();
           this.loop = this.loop.bind(this);
           requestAnimationFrame(this.loop);
         }
 
         reset() {
           this.player = new Player();
-          // *** SPAWN ENEMY CLOSER TO PLAYER (on platform to the right) ***
           this.enemies = [new Enemy(450, 900)];
-          this.bullets = [];
+          this.bulletManager.bullets = [];
+          this.ui.init(this.player.wallJumpsMax, this.player.maxDashes);
         }
 
+        // Context object passed to entities so they can access systems
+        // This acts as a Service Locator for the entities
         get context() {
           return {
             input: this.input,
             camera: this.camera,
             particles: this.particles,
             level: this.level,
-            bullets: this.bullets,
+            physics: this.physics,
+            bulletManager: this.bulletManager,
             game: this,
           };
         }
 
         update() {
+          // Camera
           this.camera.update(
             this.player,
             this.canvas.width,
             this.canvas.height
           );
+
+          // Particles
           this.particles.update();
+
+          // Player
           this.player.update(this.context);
-          this.enemies.forEach((e) => e.update(this.context, this.player));
-          this.updateBullets();
+
+          // Enemies
+          this.enemies.forEach((e) => e.update(this.context));
+
+          // Bullets
+          this.bulletManager.update(this.context);
+
+          // UI
           this.ui.update(this.player);
+
+          // Input Cleanup
           this.input.clearFrame();
         }
 
-        updateBullets() {
-          for (let i = this.bullets.length - 1; i >= 0; i--) {
-            let b = this.bullets[i];
-            b.x += b.dx;
-            b.y += b.dy;
-
-            this.particles.emitTrail(
-              b.x,
-              b.y,
-              b.isPlayer ? Config.COLORS.PLAYER : Config.COLORS.ENEMY,
-              b.radius
-            );
-
-            if (
-              b.x < 0 ||
-              b.x > Config.WORLD.WIDTH ||
-              b.y < 0 ||
-              b.y > Config.WORLD.HEIGHT
-            ) {
-              this.bullets.splice(i, 1);
-              continue;
-            }
-
-            let hitPlat = false;
-            for (let plat of this.level.platforms) {
-              if (
-                Utils.checkAABB(
-                  {
-                    x: b.x - b.radius,
-                    y: b.y - b.radius,
-                    width: b.radius * 2,
-                    height: b.radius * 2,
-                  },
-                  plat
-                )
-              ) {
-                hitPlat = true;
-                this.particles.emitExplosion(b.x, b.y, "#ccc");
-                break;
-              }
-            }
-            if (hitPlat) {
-              this.bullets.splice(i, 1);
-              continue;
-            }
-
-            if (b.isPlayer) {
-              for (let j = this.enemies.length - 1; j >= 0; j--) {
-                let e = this.enemies[j];
-                if (
-                  Utils.checkAABB(
-                    { x: b.x, y: b.y, width: b.radius, height: b.radius },
-                    e
-                  )
-                ) {
-                  e.takeDamage(20);
-                  this.particles.emitExplosion(b.x, b.y, Config.COLORS.ENEMY);
-                  this.bullets.splice(i, 1);
-                  if (e.health <= 0) {
-                    this.particles.emitExplosion(
-                      e.x + 12,
-                      e.y + 12,
-                      Config.COLORS.ENEMY
-                    );
-                    e.health = e.maxHealth;
-                  }
-                  break;
-                }
-              }
-            }
-          }
-        }
-
         draw() {
-          this.ctx.fillStyle = Config.COLORS.BG;
-          this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+          this.renderer.clear(this.canvas.width, this.canvas.height);
+          this.renderer.begin();
 
-          this.ctx.save();
-          this.ctx.translate(-this.camera.x, -this.camera.y);
-
-          this.level.draw(this.ctx);
+          this.renderer.drawLevel(this.level);
           this.particles.draw(this.ctx);
-          this.enemies.forEach((e) => e.draw(this.ctx, this.player));
-          this.player.draw(this.ctx, this.input.mouse, this.camera);
+          this.enemies.forEach((e) =>
+            this.renderer.drawEntity(e, {
+              x: this.player.x + this.player.width / 2,
+              y: this.player.y + this.player.height / 2,
+            })
+          );
+          this.renderer.drawEntity(this.player, {
+            x: this.input.mouse.x + this.camera.x,
+            y: this.input.mouse.y + this.camera.y,
+          });
+          this.bulletManager.draw(this.renderer);
 
-          for (let b of this.bullets) {
-            this.ctx.fillStyle = b.isPlayer ? "#fff" : "#ffaaaa";
-            this.ctx.shadowBlur = 8;
-            this.ctx.shadowColor = b.isPlayer
-              ? Config.COLORS.PLAYER
-              : Config.COLORS.ENEMY;
-            this.ctx.beginPath();
-            this.ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
-            this.ctx.fill();
-          }
-
-          this.ctx.restore();
-
-          this.ctx.shadowBlur = 4;
-          this.ctx.shadowColor = "#fff";
-          this.ctx.strokeStyle = "#fff";
-          this.ctx.lineWidth = 1;
-          const mx = this.input.mouse.x;
-          const my = this.input.mouse.y;
-
-          this.ctx.strokeRect(mx - 6, my - 6, 12, 12);
-          this.ctx.beginPath();
-          this.ctx.moveTo(mx, my - 2);
-          this.ctx.lineTo(mx, my + 2);
-          this.ctx.moveTo(mx - 2, my);
-          this.ctx.lineTo(mx + 2, my);
-          this.ctx.stroke();
+          this.renderer.end();
+          this.renderer.drawCursor(this.input.mouse);
         }
 
         loop() {
@@ -1144,6 +1334,7 @@
         }
       }
 
+      // Start Game
       const game = new Game();
     </script>
   </body>
