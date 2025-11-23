@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Neon Square - SOLID Refactor</title>
+    <title>Neon Square - AI & Collisions</title>
     <style>
       /* --- RESET & LAYOUT --- */
       * {
@@ -32,7 +32,6 @@
         overflow: hidden;
       }
 
-      /* LAYER 0: CANVAS */
       canvas {
         position: absolute;
         top: 0;
@@ -45,7 +44,7 @@
         z-index: 0;
       }
 
-      /* LAYER 1: UI HUD */
+      /* UI HUD */
       #ui-layer {
         position: absolute;
         top: 0;
@@ -54,7 +53,6 @@
         height: 100%;
         z-index: 10;
         pointer-events: none;
-        transition: opacity 0.3s;
       }
 
       #ui-panel {
@@ -62,7 +60,7 @@
         top: 20px;
         right: 20px;
         width: 220px;
-        height: 100px;
+        height: 140px;
         background: rgba(0, 0, 0, 0.6);
         border: 1px solid rgba(255, 255, 255, 0.3);
         border-radius: 10px;
@@ -80,173 +78,61 @@
         font-size: 12px;
         font-weight: bold;
       }
-      .label {
-        color: #fff;
-        margin-right: 10px;
-        min-width: 70px;
-      }
+      .label { color: #fff; margin-right: 10px; min-width: 70px; }
+      .hp-container { flex-grow: 1; height: 12px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); }
+      #hp-fill { height: 100%; width: 100%; background-color: #ffff00; transition: width 0.1s linear, background-color 0.2s; }
+      
+      .weapon-info { display: flex; flex-direction: column; align-items: flex-end; width: 100%; }
+      #weapon-name { font-size: 10px; color: #aaa; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px; }
+      .cd-container { width: 100px; height: 6px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); }
+      #cd-fill { height: 100%; width: 100%; background-color: #00f3ff; transition: width 0.1s linear; }
 
-      .hp-container {
-        flex-grow: 1;
-        height: 12px;
-        background: rgba(0, 0, 0, 0.5);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-      }
-      #hp-fill {
-        height: 100%;
-        width: 100%;
-        background-color: #ffff00;
-        transition: width 0.1s linear, background-color 0.2s;
-      }
+      .pips-container { display: flex; gap: 4px; }
+      .pip { width: 15px; height: 10px; background-color: #333; border-radius: 1px; transition: background-color 0.1s; }
+      .pip.jump-active { background-color: #ffff00; box-shadow: 0 0 5px #ffff00; }
+      .pip.dash-active { background-color: #00f3ff; box-shadow: 0 0 5px #00f3ff; }
 
-      .pips-container {
-        display: flex;
-        gap: 4px;
-      }
-      .pip {
-        width: 15px;
-        height: 10px;
-        background-color: #333;
-        border-radius: 1px;
-        transition: background-color 0.1s;
-      }
-      .pip.jump-active {
-        background-color: #ffff00;
-        box-shadow: 0 0 5px #ffff00;
-      }
-      .pip.dash-active {
-        background-color: #00f3ff;
-        box-shadow: 0 0 5px #00f3ff;
-      }
-
-      /* LAYER 2: CINEMATIC */
+      /* CINEMATIC & FADE */
       #cinematic-layer {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        z-index: 20;
-        pointer-events: none;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        opacity: 0;
-        transition: opacity 0.5s ease;
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 20; pointer-events: none;
+        display: flex; flex-direction: column; justify-content: space-between; opacity: 0; transition: opacity 0.5s ease;
       }
-
-      #cinematic-layer.active {
-        opacity: 1;
-      }
-
-      .cine-bar {
-        width: 100%;
-        height: 0;
-        background-color: #000;
-        transition: height 0.5s ease;
-      }
-
-      #cinematic-layer.active .cine-bar {
-        height: 60px;
-      }
-
+      #cinematic-layer.active { opacity: 1; }
+      .cine-bar { width: 100%; height: 0; background-color: #000; transition: height 0.5s ease; }
+      #cinematic-layer.active .cine-bar { height: 60px; }
       #dialogue-box {
-        position: absolute;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 600px;
-        background: rgba(0, 0, 0, 0.8);
-        border: 1px solid #fff;
-        padding: 20px;
-        text-align: center;
-        font-family: "Courier New", monospace;
-        display: none;
+        position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 600px;
+        background: rgba(0,0,0,0.8); border: 1px solid #fff; padding: 20px; text-align: center;
+        font-family: "Courier New", monospace; display: none;
       }
-      #cinematic-layer.active #dialogue-box {
-        display: block;
-      }
-
-      /* LAYER 3: GLOBAL FADE */
+      #cinematic-layer.active #dialogue-box { display: block; }
       #fade-overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: #000;
-        z-index: 30;
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 1s ease;
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000;
+        z-index: 30; opacity: 0; pointer-events: none; transition: opacity 1s ease;
       }
-      #fade-overlay.black {
-        opacity: 1;
-      }
+      #fade-overlay.black { opacity: 1; }
     </style>
   </head>
   <body>
     <div id="game-container">
       <canvas id="game" width="800" height="450"></canvas>
-
       <div id="ui-layer">
         <div id="ui-panel">
-          <div class="ui-row">
-            <span class="label">HP</span>
-            <div class="hp-container"><div id="hp-fill"></div></div>
-          </div>
-          <div class="ui-row">
-            <span class="label">Wall Jumps</span>
-            <div id="jumps-container" class="pips-container"></div>
-          </div>
-          <div class="ui-row">
-            <span class="label">Dashes</span>
-            <div id="dashes-container" class="pips-container"></div>
-          </div>
+          <div class="ui-row"><span class="label">HP</span><div class="hp-container"><div id="hp-fill"></div></div></div>
+          <div class="ui-row"><span class="label">Wall Jumps</span><div id="jumps-container" class="pips-container"></div></div>
+          <div class="ui-row"><span class="label">Dashes</span><div id="dashes-container" class="pips-container"></div></div>
+          <div class="ui-row"><span class="label">Weapon</span><div class="weapon-info"><span id="weapon-name">Pellets</span><div class="cd-container"><div id="cd-fill"></div></div></div></div>
         </div>
       </div>
-
       <div id="cinematic-layer">
         <div class="cine-bar top"></div>
         <div id="dialogue-box">System Initialized...</div>
         <div class="cine-bar bottom"></div>
       </div>
-
       <div id="fade-overlay"></div>
     </div>
 
     <script>
-      /**
-       * SOLID PRINCIPLES APPLIED:
-       *
-       * 1. Single Responsibility Principle (SRP):
-       *    - PhysicsSystem: Handles movement and collision.
-       *    - RenderSystem: Handles drawing.
-       *    - InputHandler: Handles raw input.
-       *    - PlayerController: Maps input to player actions.
-       *    - UIManager: Handles DOM UI updates.
-       *    - ParticleSystem: Handles visual effects.
-       *
-       * 2. Open/Closed Principle (OCP):
-       *    - The Game class iterates over generic IGameObject lists.
-       *    - New entities (e.g., Traps, Powerups) can be added by extending Entity
-       *      without modifying the main game loop or PhysicsSystem.
-       *
-       * 3. Liskov Substitution Principle (LSP):
-       *    - All entities (Player, Enemy, Bullet) inherit from Entity/Actor and
-       *      can be treated uniformly by the PhysicsSystem and RenderSystem.
-       *
-       * 4. Interface Segregation Principle (ISP):
-       *    - (Simulated via Duck Typing/Composition)
-       *    - Not all objects need health (Bullets vs Actors).
-       *    - Not all objects need eyes (Bullets vs Actors).
-       *    - RenderSystem checks for capabilities before drawing.
-       *
-       * 5. Dependency Inversion Principle (DIP):
-       *    - Entities depend on the abstract 'GameContext' interface (injected),
-       *      not on the concrete Game class instance directly.
-       */
-
       // ================== CONFIGURATION ==================
       class Config {
         static PHYSICS = {
@@ -262,6 +148,7 @@
           DASH_REGEN_TIME: 30,
           JUMP_POWER: -13,
           JUMP_CUTOFF: 0.5,
+          ENTITY_REPULSION: 1.5 // Strength of characters pushing each other
         };
 
         static WORLD = {
@@ -274,21 +161,20 @@
           PLAYER: "#FFFF00",
           PLAYER_EYES: "#000000",
           ENEMY: "#ff0055",
+          ENEMY_DEAD: "#800080",
           ENEMY_EYES: "#330000",
           WALL: "#1e1e24",
           WALL_GLOW: "rgba(0, 0, 0, 0)",
           DASH_ACTIVE: "#00f3ff",
+          ENEMY_DASH: "#ff5500",
         };
       }
 
       // ================== UTILITIES ==================
       class Utils {
-        static rand(min, max) {
-          return Math.random() * (max - min) + min;
-        }
-        static lerp(start, end, amt) {
-          return (1 - amt) * start + amt * end;
-        }
+        static rand(min, max) { return Math.random() * (max - min) + min; }
+        static lerp(start, end, amt) { return (1 - amt) * start + amt * end; }
+        
         static checkAABB(rect1, rect2) {
           return (
             rect1.x < rect2.x + rect2.width &&
@@ -297,245 +183,326 @@
             rect1.y + rect1.height > rect2.y
           );
         }
-        static getAngle(x1, y1, x2, y2) {
-          return Math.atan2(y2 - y1, x2 - x1);
+
+        static getAngle(x1, y1, x2, y2) { return Math.atan2(y2 - y1, x2 - x1); }
+        static dist(x1, y1, x2, y2) { return Math.sqrt(Math.pow(x2-x1, 2) + Math.pow(y2-y1, 2)); }
+        
+        static rayCast(p1, p2, platforms) {
+            const dist = Utils.dist(p1.x, p1.y, p2.x, p2.y);
+            const steps = Math.ceil(dist / 10);
+            const dx = (p2.x - p1.x) / steps;
+            const dy = (p2.y - p1.y) / steps;
+            let cx = p1.x; let cy = p1.y;
+            for(let i=0; i<steps; i++) {
+                cx += dx; cy += dy;
+                for(const plat of platforms) {
+                    if (cx > plat.x && cx < plat.x + plat.width && cy > plat.y && cy < plat.y + plat.height) {
+                        return { hit: true, x: cx, y: cy };
+                    }
+                }
+            }
+            return { hit: false };
+        }
+
+        static lineIntersectsRect(p1, p2, rect) {
+            if (p1.x > rect.x && p1.x < rect.x + rect.width && p1.y > rect.y && p1.y < rect.y + rect.height) return true;
+            if (p2.x > rect.x && p2.x < rect.x + rect.width && p2.y > rect.y && p2.y < rect.y + rect.height) return true;
+            return false;
+        }
+      }
+
+      // ================== PHYSICS & TRAJECTORY ==================
+      class Trajectory {
+        static simulate(startX, startY, width, height, vx, vy, steps, context, gravity = Config.PHYSICS.GRAVITY) {
+            let cx = startX, cy = startY, cvx = vx, cvy = vy;
+            const path = [];
+            let landedOn = null;
+            for(let i=0; i<steps; i++) {
+                cvy += gravity; cvx *= Config.PHYSICS.AIR_RESISTANCE;
+                let nx = cx + cvx; let ny = cy + cvy;
+                let colX = false; let colY = false;
+                if (nx < 0 || nx > Config.WORLD.WIDTH) { colX = true; }
+                for(const plat of context.level.platforms) {
+                    if(Utils.checkAABB({x: nx, y: cy, width: width, height: height}, plat)) { colX = true; cvx = 0; }
+                }
+                nx = colX ? cx : nx;
+                for(const plat of context.level.platforms) {
+                    if(Utils.checkAABB({x: nx, y: ny, width: width, height: height}, plat)) {
+                        colY = true;
+                        if(cvy > 0) { landedOn = plat; return { success: true, landedOn: plat, path: path }; }
+                        cvy = 0;
+                    }
+                }
+                if(colY) ny = cy;
+                cx = nx; cy = ny;
+                path.push({x: cx, y: cy});
+            }
+            return { success: false, path: path };
+        }
+      }
+
+      // ================== AI SYSTEM ==================
+      class EnemyAI {
+        constructor(enemy) {
+            this.enemy = enemy;
+            this.state = "THINK";
+            this.targetPoint = null;
+            this.pathTimer = 0;
+            this.shootTimer = 0;
+            this.repathTimer = 0;
+            this.tacticalPoints = [];
+            this.initialized = false;
+        }
+
+        init(level) {
+            const resolution = 100;
+            level.platforms.forEach(p => {
+                if(p.width > 40) {
+                    for(let x = p.x + 20; x < p.x + p.width - 20; x += resolution) {
+                        this.tacticalPoints.push({ x: x, y: p.y - this.enemy.height - 2, platform: p });
+                    }
+                }
+            });
+            this.initialized = true;
+        }
+
+        update(context) {
+            if(!this.initialized) this.init(context.level);
+            if(this.enemy.isDead) return;
+
+            const player = context.game.player;
+            const distToPlayer = Utils.dist(this.enemy.x, this.enemy.y, player.x, player.y);
+            const los = this._checkLOS(this.enemy, player, context.level.platforms);
+            
+            if(los) {
+                this.shootTimer--;
+                if(this.shootTimer <= 0) {
+                    const angle = Utils.getAngle(this.enemy.x + this.enemy.width/2, this.enemy.y + this.enemy.height/2, player.x + player.width/2, player.y + player.height/2);
+                    const spread = (Math.random() - 0.5) * 0.2;
+                    this.enemy.shoot(context, angle + spread);
+                    this.shootTimer = 15;
+                }
+            }
+
+            this.repathTimer--;
+            if(this.state === "THINK" || this.repathTimer <= 0) {
+                this._findBestPosition(context, player);
+                this.repathTimer = 60;
+            }
+            if(this.state === "MOVE" && this.targetPoint) {
+                this._executeMovement(context);
+            }
+        }
+
+        _checkLOS(entity1, entity2, platforms) {
+            const start = {x: entity1.x + entity1.width/2, y: entity1.y + entity1.height/2};
+            const end = {x: entity2.x + entity2.width/2, y: entity2.y + entity2.height/2};
+            const res = Utils.rayCast(start, end, platforms);
+            return !res.hit;
+        }
+
+        _findBestPosition(context, player) {
+            let bestScore = -999999;
+            let bestPoint = null;
+            for(const pt of this.tacticalPoints) {
+                let score = 0;
+                const d = Utils.dist(pt.x, pt.y, player.x, player.y);
+                if(d < 300) score -= 1000; else score += d * 2;
+                const dummy = {x: pt.x, y: pt.y, width: 1, height: 1};
+                if(this._checkLOS(dummy, player, context.level.platforms)) score += 5000; else score -= 2000;
+                if(pt.y < player.y) score += 500;
+                const distFromSelf = Utils.dist(this.enemy.x, this.enemy.y, pt.x, pt.y);
+                if(distFromSelf > 800) score -= 2000;
+                if(score > bestScore) { bestScore = score; bestPoint = pt; }
+            }
+            if(bestPoint) { this.targetPoint = bestPoint; this.state = "MOVE"; }
+        }
+
+        _executeMovement(context) {
+            const ex = this.enemy.x; const ey = this.enemy.y;
+            const tx = this.targetPoint.x; const ty = this.targetPoint.y;
+            const dx = tx - ex; const dy = ty - ey;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if(dist < 30) { this.enemy.dx *= 0.8; return; }
+
+            if(Math.abs(dy) < 50 && this.enemy.onGround) {
+                if(dx > 0) this.enemy.moveInput.d = true; else this.enemy.moveInput.a = true;
+                if(!this.enemy.onGround) this.enemy.moveInput.w = true;
+            } else {
+                if(this.enemy.dashes > 0 && !this.enemy.isDashing) {
+                    const dashSpeed = Config.PHYSICS.DASH_SPEED;
+                    const dirs = [{x: 1, y: 0}, {x: -1, y: 0}, {x: 0, y: -1}, {x: 1, y: -1}, {x: -1, y: -1}, {x: 1, y: 1}, {x: -1, y: 1}];
+                    for(const dir of dirs) {
+                        const sim = Trajectory.simulate(ex, ey, this.enemy.width, this.enemy.height, dir.x * dashSpeed, dir.y * dashSpeed, 15, context, 0);
+                        if(sim.path.length > 0) {
+                            const endPos = sim.path[sim.path.length-1];
+                            const newDist = Utils.dist(endPos.x, endPos.y, tx, ty);
+                            if(newDist < dist - 100) { this.enemy.dash(dir.x, dir.y, context); return; }
+                        }
+                    }
+                }
+                if(dx > 0) this.enemy.moveInput.d = true; else this.enemy.moveInput.a = true;
+                if(this.enemy.onWall) { if(ty < ey) this.enemy.moveInput.w = true; } 
+                else if (this.enemy.onGround && ty < ey - 50) this.enemy.moveInput.w = true;
+            }
         }
       }
 
       // ================== CORE SYSTEMS ==================
-
-      // --- INPUT SYSTEM ---
       class InputHandler {
         constructor(canvas) {
-          this.keys = {};
-          this.keysPressed = {};
-          this.mouse = { x: 0, y: 0, down: false };
+          this.keys = {}; this.keysPressed = {};
+          this.mouse = { x: 0, y: 0, down: false, pressed: false };
           this.canvas = canvas;
-
           window.addEventListener("keydown", (e) => this._onKeyDown(e));
           window.addEventListener("keyup", (e) => this._onKeyUp(e));
           canvas.addEventListener("mousemove", (e) => this._onMouseMove(e));
           canvas.addEventListener("mousedown", (e) => this._onMouseDown(e));
           canvas.addEventListener("mouseup", (e) => this._onMouseUp(e));
         }
-
-        _onKeyDown(e) {
-          const k = e.key.toLowerCase();
-          if (!this.keys[k]) this.keysPressed[k] = true;
-          this.keys[k] = true;
-        }
-        _onKeyUp(e) {
-          const k = e.key.toLowerCase();
-          this.keys[k] = false;
-          this.keysPressed[k] = false;
-        }
-        _onMouseMove(e) {
-          const r = this.canvas.getBoundingClientRect();
-          this.mouse.x = e.clientX - r.left;
-          this.mouse.y = e.clientY - r.top;
-        }
-        _onMouseDown(e) {
-          if (e.button === 0) this.mouse.down = true;
-        }
-        _onMouseUp(e) {
-          if (e.button === 0) this.mouse.down = false;
-        }
-
-        isDown(key) {
-          return !!this.keys[key];
-        }
-        isPressed(key) {
-          return !!this.keysPressed[key];
-        }
-        clearFrame() {
-          this.keysPressed = {};
-        }
+        _onKeyDown(e) { const k = e.key.toLowerCase(); if(!this.keys[k]) this.keysPressed[k] = true; this.keys[k] = true; }
+        _onKeyUp(e) { const k = e.key.toLowerCase(); this.keys[k] = false; this.keysPressed[k] = false; }
+        _onMouseMove(e) { const r = this.canvas.getBoundingClientRect(); this.mouse.x = e.clientX - r.left; this.mouse.y = e.clientY - r.top; }
+        _onMouseDown(e) { if(e.button===0) { this.mouse.down=true; this.mouse.pressed=true; } }
+        _onMouseUp(e) { if(e.button===0) this.mouse.down=false; }
+        isDown(key) { return !!this.keys[key]; }
+        isPressed(key) { return !!this.keysPressed[key]; }
+        clearFrame() { this.keysPressed = {}; this.mouse.pressed = false; }
       }
 
-      // --- PHYSICS SYSTEM ---
       class PhysicsSystem {
-        constructor(level) {
-          this.level = level;
-        }
-
-        applyGravity(entity) {
-          entity.dy += Config.PHYSICS.GRAVITY;
-        }
-
+        constructor(level) { this.level = level; }
+        
+        applyGravity(entity) { entity.dy += Config.PHYSICS.GRAVITY; }
+        
         applyFriction(entity) {
-          const friction = entity.onGround
-            ? Config.PHYSICS.GROUND_FRICTION
-            : Config.PHYSICS.AIR_RESISTANCE;
+          const friction = entity.onGround ? Config.PHYSICS.GROUND_FRICTION : Config.PHYSICS.AIR_RESISTANCE;
           entity.dx *= friction;
           if (Math.abs(entity.dx) < 0.1) entity.dx = 0;
         }
 
         resolveCollisions(entity) {
-          // Wall Slide Logic
-          if (entity.onWall && entity.dy > 0 && !entity.onGround) {
-            entity.dy = Config.PHYSICS.WALL_SLIDE_SPEED;
-          }
-
+          if (entity.onWall && entity.dy > 0 && !entity.onGround) entity.dy = Config.PHYSICS.WALL_SLIDE_SPEED;
           let nextX = entity.x + entity.dx;
           let nextY = entity.y + entity.dy;
+          entity.onGround = false; entity.onWall = false;
 
-          entity.onGround = false;
-          entity.onWall = false; // "left" | "right" | false
-
-          // Horizontal Collision
           for (const plat of this.level.platforms) {
-            if (
-              Utils.checkAABB(
-                {
-                  x: nextX,
-                  y: entity.y,
-                  width: entity.width,
-                  height: entity.height,
-                },
-                plat
-              )
-            ) {
-              if (entity.dx > 0) {
-                nextX = plat.x - entity.width;
-                entity.onWall = "right";
-              } else if (entity.dx < 0) {
-                nextX = plat.x + plat.width;
-                entity.onWall = "left";
-              }
+            if (Utils.checkAABB({ x: nextX, y: entity.y, width: entity.width, height: entity.height }, plat)) {
+              if (entity.dx > 0) { nextX = plat.x - entity.width; entity.onWall = "right"; }
+              else if (entity.dx < 0) { nextX = plat.x + plat.width; entity.onWall = "left"; }
               entity.dx = 0;
             }
           }
-
-          // Vertical Collision
           for (const plat of this.level.platforms) {
-            if (
-              Utils.checkAABB(
-                {
-                  x: nextX,
-                  y: nextY,
-                  width: entity.width,
-                  height: entity.height,
-                },
-                plat
-              )
-            ) {
-              if (entity.dy > 0) {
-                nextY = plat.y - entity.height;
-                entity.onGround = true;
-              } else if (entity.dy < 0) {
-                nextY = plat.y + plat.height;
-              }
+            if (Utils.checkAABB({ x: nextX, y: nextY, width: entity.width, height: entity.height }, plat)) {
+              if (entity.dy > 0) { nextY = plat.y - entity.height; entity.onGround = true; }
+              else if (entity.dy < 0) { nextY = plat.y + plat.height; }
               entity.dy = 0;
             }
           }
-
-          entity.x = nextX;
-          entity.y = nextY;
-
-          // World Bounds
+          entity.x = nextX; entity.y = nextY;
           if (entity.x < 0) entity.x = 0;
-          if (entity.x > Config.WORLD.WIDTH - entity.width)
-            entity.x = Config.WORLD.WIDTH - entity.width;
+          if (entity.x > Config.WORLD.WIDTH - entity.width) entity.x = Config.WORLD.WIDTH - entity.width;
+        }
+
+        // NEW: Handles collisions between entities (Player <-> Enemy, Enemy <-> Enemy)
+        resolveEntitySeparation(entities) {
+            for (let i = 0; i < entities.length; i++) {
+                for (let j = i + 1; j < entities.length; j++) {
+                    const e1 = entities[i];
+                    const e2 = entities[j];
+
+                    if (e1.isDead || e2.isDead) continue; // Don't collide with corpses
+
+                    if (Utils.checkAABB(e1, e2)) {
+                        // Calculate center difference
+                        const cx1 = e1.x + e1.width / 2;
+                        const cy1 = e1.y + e1.height / 2;
+                        const cx2 = e2.x + e2.width / 2;
+                        const cy2 = e2.y + e2.height / 2;
+
+                        let dx = cx1 - cx2;
+                        let dy = cy1 - cy2;
+                        let dist = Math.sqrt(dx * dx + dy * dy);
+
+                        // Avoid division by zero
+                        if (dist === 0) { dx = 1; dy = 0; dist = 1; }
+
+                        // Push apart
+                        // Overlap depth approx
+                        const minDist = (e1.width + e2.width) / 2; // Simple radius approximation
+                        
+                        // Normalized vector
+                        const nx = dx / dist;
+                        const ny = dy / dist;
+
+                        // Repulsion force
+                        const force = Config.PHYSICS.ENTITY_REPULSION;
+
+                        // Apply to velocities (soft collision)
+                        e1.dx += nx * force;
+                        e1.dy += ny * force;
+                        e2.dx -= nx * force;
+                        e2.dy -= ny * force;
+                    }
+                }
+            }
         }
       }
 
-      // --- RENDER SYSTEM ---
       class RenderSystem {
-        constructor(ctx, camera) {
-          this.ctx = ctx;
-          this.camera = camera;
-        }
-
-        clear(width, height) {
-          this.ctx.fillStyle = Config.COLORS.BG;
-          this.ctx.fillRect(0, 0, width, height);
-        }
-
-        begin() {
-          this.ctx.save();
-          this.ctx.translate(-this.camera.x, -this.camera.y);
-        }
-
-        end() {
-          this.ctx.restore();
-        }
-
+        constructor(ctx, camera) { this.ctx = ctx; this.camera = camera; }
+        clear(width, height) { this.ctx.fillStyle = Config.COLORS.BG; this.ctx.fillRect(0, 0, width, height); }
+        begin() { this.ctx.save(); this.ctx.translate(-this.camera.x, -this.camera.y); }
+        end() { this.ctx.restore(); }
+        
         drawLevel(level) {
           this.ctx.beginPath();
-          for (const p of level.platforms) {
-            this.ctx.rect(p.x, p.y, p.width, p.height);
-          }
+          for (const p of level.platforms) this.ctx.rect(p.x, p.y, p.width, p.height);
           this.ctx.fillStyle = Config.COLORS.WALL;
-          this.ctx.shadowColor = Config.COLORS.WALL_GLOW;
-          this.ctx.shadowBlur = 10;
-          this.ctx.fill();
-          this.ctx.shadowBlur = 0;
+          this.ctx.shadowColor = Config.COLORS.WALL_GLOW; this.ctx.shadowBlur = 10;
+          this.ctx.fill(); this.ctx.shadowBlur = 0;
         }
 
         drawEntity(entity, targetPoint) {
+          if(entity.isDead && !entity.markedForDeletion) { this.ctx.globalAlpha = 0.5; }
           this.ctx.save();
-          const cx = entity.x + entity.width / 2;
-          const cy = entity.y + entity.height;
-
-          this.ctx.translate(cx, cy);
-          this.ctx.scale(entity.scaleX, entity.scaleY);
-          this.ctx.translate(-cx, -cy);
+          const cx = entity.x + entity.width / 2; const cy = entity.y + entity.height;
+          this.ctx.translate(cx, cy); this.ctx.scale(entity.scaleX, entity.scaleY); this.ctx.translate(-cx, -cy);
 
           this.ctx.fillStyle = entity.color;
-          // Flash effect for damage
-          if (entity.hitFlashTimer > 0) {
-            this.ctx.fillStyle = "#fff";
-          }
-          // Dash effect override
-          if (entity.isDashing) {
-            this.ctx.fillStyle = "#fff";
-          }
+          if (entity.hitFlashTimer > 0) this.ctx.fillStyle = "#fff";
+          if (entity.isDashing) this.ctx.fillStyle = "#fff";
 
-          this.ctx.shadowBlur = 6;
-          this.ctx.shadowColor = entity.color;
+          this.ctx.shadowBlur = 6; this.ctx.shadowColor = entity.color;
           this.ctx.fillRect(entity.x, entity.y, entity.width, entity.height);
 
-          // Draw Eyes if applicable
           if (entity.hasEyes) {
             const targetX = targetPoint ? targetPoint.x : entity.x;
             const targetY = targetPoint ? targetPoint.y : entity.y;
-            this._drawEyes(
-              entity,
-              targetX,
-              targetY,
-              entity.eyeColor || "#000"
-            );
+            this._drawEyes(entity, targetX, targetY, entity.eyeColor || "#000");
           }
-
-          // Draw Health Bar if applicable
-          if (entity.showHealthBar) {
-            this._drawHealthBar(entity);
-          }
-
-          this.ctx.restore();
+          if (entity.showHealthBar) this._drawHealthBar(entity);
+          if (entity.currentWeapon && !entity.isDead) entity.currentWeapon.draw(this.ctx, entity, targetPoint);
+          this.ctx.restore(); this.ctx.globalAlpha = 1.0;
         }
 
         _drawEyes(entity, targetX, targetY, color) {
-          const es = 4;
-          const esp = 6;
-          const cx = entity.x + entity.width / 2;
-          const cy = entity.y + entity.height / 3;
-          const lx = targetX - cx;
-          const ly = targetY - cy;
-          const mm = 3;
+          if(entity.isDead) return;
+          const es = 4; const esp = 6; const cx = entity.x + entity.width / 2; const cy = entity.y + entity.height / 3;
+          const lx = targetX - cx; const ly = targetY - cy; const mm = 3;
           const d = Math.sqrt(lx * lx + ly * ly) || 1;
-          const mx = (lx / d) * mm;
-          const my = (ly / d) * mm;
-          this.ctx.fillStyle = color;
-          this.ctx.shadowBlur = 0;
+          const mx = (lx / d) * mm; const my = (ly / d) * mm;
+          this.ctx.fillStyle = color; this.ctx.shadowBlur = 0;
           this.ctx.fillRect(cx - esp + mx - es / 2, cy + my - es / 2, es, es);
           this.ctx.fillRect(cx + esp + mx - es / 2, cy + my - es / 2, es, es);
         }
 
         _drawHealthBar(entity) {
+          if (entity.isDead) return;
           const hpPct = Math.max(0, entity.health / entity.maxHealth);
-          this.ctx.shadowBlur = 0;
-          this.ctx.fillStyle = "#333";
+          this.ctx.shadowBlur = 0; this.ctx.fillStyle = "#333";
           this.ctx.fillRect(entity.x, entity.y - 8, entity.width, 3);
           this.ctx.fillStyle = "#f00";
           this.ctx.fillRect(entity.x, entity.y - 8, entity.width * hpPct, 3);
@@ -544,797 +511,520 @@
         drawBullet(bullet) {
           this.ctx.fillStyle = bullet.isPlayer ? "#fff" : "#ffaaaa";
           this.ctx.shadowBlur = 8;
-          this.ctx.shadowColor = bullet.isPlayer
-            ? Config.COLORS.PLAYER
-            : Config.COLORS.ENEMY;
-          this.ctx.beginPath();
-          this.ctx.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2);
-          this.ctx.fill();
+          this.ctx.shadowColor = bullet.isPlayer ? Config.COLORS.PLAYER : Config.COLORS.ENEMY;
+          this.ctx.beginPath(); this.ctx.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2); this.ctx.fill();
         }
 
         drawCursor(mouse) {
-          this.ctx.shadowBlur = 4;
-          this.ctx.shadowColor = "#fff";
-          this.ctx.strokeStyle = "#fff";
-          this.ctx.lineWidth = 1;
-          const mx = mouse.x;
-          const my = mouse.y;
-
+          this.ctx.shadowBlur = 4; this.ctx.shadowColor = "#fff"; this.ctx.strokeStyle = "#fff"; this.ctx.lineWidth = 1;
+          const mx = mouse.x; const my = mouse.y;
           this.ctx.strokeRect(mx - 6, my - 6, 12, 12);
-          this.ctx.beginPath();
-          this.ctx.moveTo(mx, my - 2);
-          this.ctx.lineTo(mx, my + 2);
-          this.ctx.moveTo(mx - 2, my);
-          this.ctx.lineTo(mx + 2, my);
-          this.ctx.stroke();
+          this.ctx.beginPath(); this.ctx.moveTo(mx, my - 2); this.ctx.lineTo(mx, my + 2);
+          this.ctx.moveTo(mx - 2, my); this.ctx.lineTo(mx + 2, my); this.ctx.stroke();
         }
       }
 
-      // --- PARTICLE SYSTEM ---
       class Particle {
         constructor(x, y, type, color, size = null) {
-          this.x = x;
-          this.y = y;
-          this.type = type;
-          this.color = color;
-          this.life = 1.0;
-          this.size = size;
+          this.x = x; this.y = y; this.type = type; this.color = color; this.life = 1.0; this.size = size;
           this._initPhysics();
         }
         _initPhysics() {
           const angle = Utils.rand(0, Math.PI * 2);
-          if (this.type === "dust") {
-            this.dx = Math.cos(angle) * 0.5;
-            this.dy = -Utils.rand(0.5, 2);
-            this.decay = 0.04;
-            this.size = this.size || Utils.rand(2, 4);
-          } else if (this.type === "spark") {
-            const speed = 3;
-            this.dx = Math.cos(angle) * speed;
-            this.dy = Math.sin(angle) * speed;
-            this.decay = 0.06;
-            this.size = this.size || Utils.rand(2, 5);
-          } else if (this.type === "trail") {
-            this.dx = 0;
-            this.dy = 0;
-            this.decay = 0.1;
-            this.size = this.size || Utils.rand(2, 4);
-          }
+          if (this.type === "dust") { this.dx = Math.cos(angle) * 0.5; this.dy = -Utils.rand(0.5, 2); this.decay = 0.04; this.size = this.size || Utils.rand(2, 4); }
+          else if (this.type === "spark") { const speed = 3; this.dx = Math.cos(angle) * speed; this.dy = Math.sin(angle) * speed; this.decay = 0.06; this.size = this.size || Utils.rand(2, 5); }
+          else if (this.type === "trail") { this.dx = 0; this.dy = 0; this.decay = 0.1; this.size = this.size || Utils.rand(2, 4); }
         }
         update() {
-          this.x += this.dx;
-          this.y += this.dy;
-          this.life -= this.decay;
-          if (this.type === "spark") {
-            this.dy += 0.2;
-            this.dx *= 0.95;
-          }
+          this.x += this.dx; this.y += this.dy; this.life -= this.decay;
+          if (this.type === "spark") { this.dy += 0.2; this.dx *= 0.95; }
         }
         draw(ctx) {
-          ctx.globalAlpha = Math.max(0, this.life);
-          ctx.fillStyle = this.color;
-          ctx.shadowBlur = this.type === "spark" ? 10 : 0;
-          ctx.shadowColor = this.color;
-          ctx.fillRect(
-            this.x - this.size / 2,
-            this.y - this.size / 2,
-            this.size,
-            this.size
-          );
-          ctx.globalAlpha = 1.0;
-          ctx.shadowBlur = 0;
+          ctx.globalAlpha = Math.max(0, this.life); ctx.fillStyle = this.color;
+          ctx.shadowBlur = this.type === "spark" ? 10 : 0; ctx.shadowColor = this.color;
+          ctx.fillRect(this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
+          ctx.globalAlpha = 1.0; ctx.shadowBlur = 0;
         }
       }
 
       class ParticleSystem {
-        constructor() {
-          this.particles = [];
-        }
+        constructor() { this.particles = []; }
         update() {
           for (let i = this.particles.length - 1; i >= 0; i--) {
-            this.particles[i].update();
-            if (this.particles[i].life <= 0) this.particles.splice(i, 1);
+            this.particles[i].update(); if (this.particles[i].life <= 0) this.particles.splice(i, 1);
           }
         }
-        draw(ctx) {
-          this.particles.forEach((p) => p.draw(ctx));
-        }
-        emitDust(x, y) {
-          for (let i = 0; i < 4; i++)
-            this.particles.push(new Particle(x, y, "dust", "#888"));
-        }
-        emitExplosion(x, y, color) {
-          for (let i = 0; i < 12; i++)
-            this.particles.push(new Particle(x, y, "spark", color));
-        }
-        emitTrail(x, y, color, size) {
-          if (Math.random() > 0.3)
-            this.particles.push(new Particle(x, y, "trail", color, size));
-        }
+        draw(ctx) { this.particles.forEach((p) => p.draw(ctx)); }
+        emitDust(x, y) { for (let i = 0; i < 4; i++) this.particles.push(new Particle(x, y, "dust", "#888")); }
+        emitExplosion(x, y, color) { for (let i = 0; i < 12; i++) this.particles.push(new Particle(x, y, "spark", color)); }
+        emitTrail(x, y, color, size) { if (Math.random() > 0.3) this.particles.push(new Particle(x, y, "trail", color, size)); }
         emitGhost(x, y, width, height, color) {
-          const p = new Particle(
-            x + width / 2,
-            y + height / 2,
-            "trail",
-            color,
-            width
-          );
-          p.decay = 0.15;
-          this.particles.push(p);
+          const p = new Particle(x + width / 2, y + height / 2, "trail", color, width);
+          p.decay = 0.15; this.particles.push(p);
         }
       }
 
-      // --- UI MANAGER ---
       class UIManager {
         constructor() {
           this.uiLayer = document.getElementById("ui-layer");
-          this.cinematicLayer = document.getElementById("cinematic-layer");
-          this.fadeOverlay = document.getElementById("fade-overlay");
           this.hpFill = document.getElementById("hp-fill");
           this.jumpsContainer = document.getElementById("jumps-container");
           this.dashesContainer = document.getElementById("dashes-container");
-          this.jumpPips = [];
-          this.dashPips = [];
+          this.weaponNameEl = document.getElementById("weapon-name");
+          this.cdFill = document.getElementById("cd-fill");
+          this.jumpPips = []; this.dashPips = [];
         }
-
         init(maxJumps, maxDashes) {
           this._createPips(this.jumpsContainer, this.jumpPips, maxJumps);
           this._createPips(this.dashesContainer, this.dashPips, maxDashes);
         }
-
         _createPips(container, array, count) {
-          container.innerHTML = "";
-          array.length = 0;
-          for (let i = 0; i < count; i++) {
-            const pip = document.createElement("div");
-            pip.className = "pip";
-            container.appendChild(pip);
-            array.push(pip);
-          }
+          container.innerHTML = ""; array.length = 0;
+          for (let i = 0; i < count; i++) { const pip = document.createElement("div"); pip.className = "pip"; container.appendChild(pip); array.push(pip); }
         }
-
         update(player) {
           const hpPct = Math.max(0, player.health / player.maxHealth) * 100;
-          this.hpFill.style.width = `${hpPct}%`;
-          this.hpFill.style.backgroundColor =
-            hpPct > 30 ? Config.COLORS.PLAYER : "#ff0000";
-
-          this.jumpPips.forEach((pip, i) => {
-            if (i < player.wallJumps) pip.classList.add("jump-active");
-            else pip.classList.remove("jump-active");
-          });
-          this.dashPips.forEach((pip, i) => {
-            if (i < player.dashes) pip.classList.add("dash-active");
-            else pip.classList.remove("dash-active");
-          });
+          this.hpFill.style.width = `${hpPct}%`; this.hpFill.style.backgroundColor = hpPct > 30 ? Config.COLORS.PLAYER : "#ff0000";
+          this.jumpPips.forEach((pip, i) => { if (i < player.wallJumps) pip.classList.add("jump-active"); else pip.classList.remove("jump-active"); });
+          this.dashPips.forEach((pip, i) => { if (i < player.dashes) pip.classList.add("dash-active"); else pip.classList.remove("dash-active"); });
+          if (player.currentWeapon) {
+              this.weaponNameEl.textContent = player.currentWeapon.name;
+              if (player.currentWeapon.isUnlimited) { this.cdFill.style.width = '100%'; this.cdFill.style.backgroundColor = "#00f3ff"; } 
+              else {
+                  const pct = (player.currentWeapon.cooldownTimer / player.currentWeapon.cooldownTime);
+                  const displayPct = Math.max(0, 1 - pct) * 100;
+                  this.cdFill.style.width = `${displayPct}%`; this.cdFill.style.backgroundColor = displayPct === 100 ? "#00f3ff" : "#888";
+              }
+          }
         }
       }
 
-      // --- CAMERA ---
       class Camera {
-        constructor() {
-          this.x = 0;
-          this.y = 0;
-          this.shakePower = 0;
-        }
-        shake(amount) {
-          this.shakePower = amount;
-        }
+        constructor() { this.x = 0; this.y = 0; this.shakePower = 0; }
+        shake(amount) { this.shakePower = amount; }
         update(target, canvasWidth, canvasHeight) {
           let targetX = target.x + target.width / 2 - canvasWidth / 2;
           let targetY = target.y + target.height / 2 - canvasHeight / 2;
-          targetX = Math.max(
-            0,
-            Math.min(targetX, Config.WORLD.WIDTH - canvasWidth)
-          );
-          targetY = Math.max(
-            0,
-            Math.min(targetY, Config.WORLD.HEIGHT - canvasHeight)
-          );
+          targetX = Math.max(0, Math.min(targetX, Config.WORLD.WIDTH - canvasWidth));
+          targetY = Math.max(0, Math.min(targetY, Config.WORLD.HEIGHT - canvasHeight));
           this.x += (targetX - this.x) * 0.1;
           this.y += (targetY - this.y) * 0.1;
-
           if (this.shakePower > 0) {
-            this.x += Utils.rand(-this.shakePower, this.shakePower);
-            this.y += Utils.rand(-this.shakePower, this.shakePower);
-            this.shakePower *= 0.9;
-            if (this.shakePower < 0.5) this.shakePower = 0;
+            this.x += Utils.rand(-this.shakePower, this.shakePower); this.y += Utils.rand(-this.shakePower, this.shakePower);
+            this.shakePower *= 0.9; if (this.shakePower < 0.5) this.shakePower = 0;
           }
         }
       }
 
-      // ================== GAME OBJECTS ==================
-
-      class GameObject {
-        constructor(x, y, w, h) {
-          this.x = x;
-          this.y = y;
-          this.width = w;
-          this.height = h;
-          this.markedForDeletion = false;
-        }
-        update(context) {}
+      class Weapon {
+        constructor(name, cooldownTime, isAuto) { this.name = name; this.cooldownTime = cooldownTime; this.cooldownTimer = 0; this.isUnlimited = cooldownTime === 0; this.isAuto = isAuto; }
+        update(context, owner) { if (this.cooldownTimer > 0) this.cooldownTimer--; }
+        canAttack() { return this.cooldownTimer <= 0; }
+        attack(context, owner) {}
+        draw(ctx, owner, targetPoint) {}
       }
 
-      class Entity extends GameObject {
-        constructor(x, y, w, h, color) {
-          super(x, y, w, h);
-          this.color = color;
-          this.dx = 0;
-          this.dy = 0;
-          this.onGround = false;
-          this.onWall = false;
-          this.scaleX = 1;
-          this.scaleY = 1;
-          this.facing = "right";
-          this.isDashing = false;
-          this.hitFlashTimer = 0;
-          this.hasEyes = false;
-          this.showHealthBar = false;
+      class PelletGun extends Weapon {
+        constructor() { super("Pellets", 0, true); this.internalCooldown = 0; }
+        update(context, owner) { super.update(context, owner); if (this.internalCooldown > 0) this.internalCooldown--; }
+        canAttack() { return this.internalCooldown <= 0; }
+        attack(context, owner) {
+            this.internalCooldown = 8;
+            const cx = owner.x + owner.width / 2; const cy = owner.y + owner.height / 2;
+            const worldMouseX = context.input.mouse.x + context.camera.x;
+            const worldMouseY = context.input.mouse.y + context.camera.y;
+            const angle = Utils.getAngle(cx, cy, worldMouseX, worldMouseY);
+            this.fire(context, owner, angle);
         }
+        fire(context, owner, angle) {
+            const speed = 12;
+            const bullet = new Bullet(owner.x + owner.width/2, owner.y + owner.height/2, Math.cos(angle) * speed, Math.sin(angle) * speed, owner instanceof Player);
+            context.bulletManager.add(bullet);
+            if(owner instanceof Player) {
+                context.camera.shake(2);
+                context.particles.emitExplosion(owner.x + owner.width/2 + Math.cos(angle) * 15, owner.y + owner.height/2 + Math.sin(angle) * 15, "#fff");
+            }
+        }
+      }
 
+      class LongSword extends Weapon {
+          constructor() { super("Long Sword", 15, false); this.swinging = false; this.swingTimer = 0; this.swingDuration = 25; this.bladeLength = 80; this.damage = 40; this.hitList = []; this.targetAngle = 0; this.swingDir = 1; }
+          update(context, owner) {
+              super.update(context, owner);
+              if (this.swinging) {
+                  this.swingTimer--;
+                  const progress = 1 - (this.swingTimer / this.swingDuration);
+                  const currentAngle = Utils.lerp(this.targetAngle - 1.4 * this.swingDir, this.targetAngle + 1.4 * this.swingDir, progress);
+                  this._checkCollisions(context, owner, currentAngle);
+                  if (this.swingTimer <= 0) this.swinging = false;
+              }
+          }
+          _checkCollisions(context, owner, currentAngle) {
+            const cx = owner.x + owner.width/2; const cy = owner.y + owner.height/2;
+            const p1 = { x: cx + Math.cos(currentAngle) * 16, y: cy + Math.sin(currentAngle) * 16 };
+            const p2 = { x: cx + Math.cos(currentAngle) * (16 + this.bladeLength), y: cy + Math.sin(currentAngle) * (16 + this.bladeLength) };
+            const targets = owner instanceof Player ? context.game.enemies : [context.game.player];
+            targets.forEach(e => {
+                if (this.hitList.includes(e) || e.isDead) return;
+                if (Utils.lineIntersectsRect(p1, p2, e)) {
+                    this.hitList.push(e); e.takeDamage(this.damage);
+                    const angleToEnemy = Math.atan2((e.y + e.height/2) - cy, (e.x + e.width/2) - cx);
+                    e.dx = Math.cos(angleToEnemy) * 10; e.dy = Math.sin(angleToEnemy) * 10 - 2;
+                    if(owner instanceof Player) context.camera.shake(5);
+                    context.particles.emitExplosion(e.x + e.width/2, e.y + e.height/2, "#fff");
+                }
+            });
+          }
+          attack(context, owner) {
+              this.cooldownTimer = this.cooldownTime; this.swinging = true; this.swingTimer = this.swingDuration; this.hitList = [];
+              const cx = owner.x + owner.width / 2; const cy = owner.y + owner.height / 2;
+              let mx, my;
+              if(owner instanceof Player) {
+                mx = context.input.mouse.x + context.camera.x;
+                my = context.input.mouse.y + context.camera.y;
+              } else {
+                mx = context.game.player.x; my = context.game.player.y;
+              }
+              this.targetAngle = Math.atan2(my - cy, mx - cx);
+              this.swingDir = (mx >= cx) ? 1 : -1;
+          }
+          draw(ctx, owner, targetPoint) {
+              const cx = owner.x + owner.width/2; const cy = owner.y + owner.height/2;
+              let angle = 0;
+              if (this.swinging) {
+                  const progress = 1 - (this.swingTimer / this.swingDuration);
+                  angle = Utils.lerp(this.targetAngle - 1.4 * this.swingDir, this.targetAngle + 1.4 * this.swingDir, progress);
+              } else {
+                  const mx = targetPoint.x; const my = targetPoint.y;
+                  angle = Math.atan2(my - cy, mx - cx);
+              }
+              ctx.save(); ctx.translate(cx, cy); ctx.rotate(angle); ctx.translate(16, 0); ctx.rotate(Math.PI/2);
+              ctx.fillStyle = "#666"; ctx.fillRect(-4, 0, 8, 14);
+              ctx.fillStyle = "#888"; ctx.fillRect(-12, -6, 24, 6);
+              ctx.fillStyle = "#e0e0e0"; ctx.beginPath(); ctx.moveTo(-6, -6); ctx.lineTo(6, -6); ctx.lineTo(6, -this.bladeLength + 10); ctx.lineTo(0, -this.bladeLength); ctx.lineTo(-6, -this.bladeLength + 10); ctx.closePath(); ctx.fill();
+              ctx.restore();
+          }
+      }
+
+      // ================== GAME OBJECTS ==================
+      class Entity {
+        constructor(x, y, w, h, color) {
+          this.x = x; this.y = y; this.width = w; this.height = h; this.color = color;
+          this.dx = 0; this.dy = 0; this.onGround = false; this.onWall = false;
+          this.scaleX = 1; this.scaleY = 1; this.facing = "right";
+          this.isDashing = false; this.hitFlashTimer = 0; this.hasEyes = false;
+          this.showHealthBar = false; this.currentWeapon = null; this.isDead = false;
+          this.markedForDeletion = false;
+        }
         updateAnimation() {
-          this.scaleX = Utils.lerp(this.scaleX, 1, 0.2);
-          this.scaleY = Utils.lerp(this.scaleY, 1, 0.2);
+          this.scaleX = Utils.lerp(this.scaleX, 1, 0.2); this.scaleY = Utils.lerp(this.scaleY, 1, 0.2);
           if (this.hitFlashTimer > 0) this.hitFlashTimer--;
         }
       }
 
       class Actor extends Entity {
         constructor(x, y, w, h, color, health) {
-          super(x, y, w, h, color);
-          this.health = health;
-          this.maxHealth = health;
+          super(x, y, w, h, color); this.health = health; this.maxHealth = health;
+          this.wallJumps = 0; this.dashes = 0;
         }
         takeDamage(amount) {
-          this.health -= amount;
-          this.hitFlashTimer = 5;
+          if (this.isDead) return;
+          this.health -= amount; this.hitFlashTimer = 5;
         }
       }
 
-      // --- PLAYER ---
       class Player extends Actor {
         constructor() {
           super(100, 900, 24, 24, Config.COLORS.PLAYER, 100);
-          this.hasEyes = true;
-          this.eyeColor = Config.COLORS.PLAYER_EYES;
-
-          // Stats
-          this.wallJumpsMax = 3;
-          this.wallJumps = 3;
-          this.maxDashes = 1;
-          this.dashes = 1;
-
-          // State
-          this.dashFrameTimer = 0;
-          this.dashDir = { x: 0, y: 0 };
-          this.lastShotTime = 0;
-          this.shootCooldown = 120;
-
-          // Input Buffers
-          this.coyoteTimer = 0;
-          this.jumpBufferTimer = 0;
+          this.hasEyes = true; this.eyeColor = Config.COLORS.PLAYER_EYES;
+          this.wallJumpsMax = 3; this.wallJumps = 3; this.maxDashes = 1; this.dashes = 1;
+          this.dashFrameTimer = 0; this.dashDir = { x: 0, y: 0 };
+          this.coyoteTimer = 0; this.jumpBufferTimer = 0;
+          this.weapons = [new PelletGun(), new LongSword()];
+          this.weaponIndex = 0; this.currentWeapon = this.weapons[0];
         }
 
         update(context) {
+          this.checkDeathAndRespawn(context);
           this.updateAnimation();
           this._handleInput(context);
           this._handlePhysics(context);
           this._checkWorldBounds();
+          if (this.currentWeapon) this.currentWeapon.update(context, this);
+        }
+
+        // NEW: Respawn Logic
+        checkDeathAndRespawn(context) {
+            if(this.health <= 0) {
+                // Effects
+                context.particles.emitExplosion(this.x + this.width/2, this.y + this.height/2, this.color);
+                context.camera.shake(10);
+                context.game.freezeFrames = 5;
+
+                // Reset
+                this.health = this.maxHealth;
+                this.x = 100; // Start Point
+                this.y = 900;
+                this.dx = 0; this.dy = 0;
+                this.isDashing = false;
+                this.isDead = false;
+            }
         }
 
         _handleInput(context) {
           const input = context.input;
-          const P = Config.PHYSICS;
+          if (input.isPressed("q")) { this.weaponIndex = (this.weaponIndex + 1) % this.weapons.length; this.currentWeapon = this.weapons[this.weaponIndex]; }
+          if (this.onGround) this.coyoteTimer = 6; else this.coyoteTimer--;
+          if (input.isPressed("w")) this.jumpBufferTimer = 5; else this.jumpBufferTimer--;
+          if (!input.isDown("w") && this.dy < -3 && !this.isDashing) this.dy *= Config.PHYSICS.JUMP_CUTOFF;
+          if (input.isPressed("shift") && this.dashes > 0 && !this.isDashing) this._startDash(context, input);
 
-          // Buffers
-          if (this.onGround) this.coyoteTimer = 6;
-          else this.coyoteTimer--;
-
-          if (input.isPressed("w")) this.jumpBufferTimer = 5;
-          else this.jumpBufferTimer--;
-
-          // Variable Jump
-          if (!input.isDown("w") && this.dy < -3 && !this.isDashing) {
-            this.dy *= P.JUMP_CUTOFF;
-          }
-
-          // Dash Trigger
-          if (input.isPressed("shift") && this.dashes > 0 && !this.isDashing) {
-            this._startDash(context);
-          }
-
-          // Shooting
-          if (input.mouse.down) {
-            const now = Date.now();
-            if (now - this.lastShotTime > this.shootCooldown) {
-              this._shoot(context);
-              this.lastShotTime = now;
-            }
+          if (this.currentWeapon) {
+             const shouldFire = this.currentWeapon.isAuto ? input.mouse.down : input.mouse.pressed;
+             if (shouldFire && this.currentWeapon.canAttack()) this.currentWeapon.attack(context, this);
           }
         }
 
-        _startDash(context) {
-          const input = context.input;
-          const P = Config.PHYSICS;
-
-          this.isDashing = true;
-          this.dashes--;
-          this.dashFrameTimer = P.DASH_DURATION;
-
-          let dx = 0;
-          let dy = 0;
-          if (input.isDown("w")) dy = -1;
-          if (input.isDown("s")) dy = 1;
-          if (input.isDown("a")) dx = -1;
-          if (input.isDown("d")) dx = 1;
+        _startDash(context, input) {
+          this.isDashing = true; this.dashes--; this.dashFrameTimer = Config.PHYSICS.DASH_DURATION;
+          let dx = 0; let dy = 0;
+          if (input.isDown("w")) dy = -1; if (input.isDown("s")) dy = 1;
+          if (input.isDown("a")) dx = -1; if (input.isDown("d")) dx = 1;
           if (dx === 0 && dy === 0) dx = this.facing === "left" ? -1 : 1;
-
           const len = Math.sqrt(dx * dx + dy * dy);
-          if (len !== 0) {
-            dx /= len;
-            dy /= len;
-          }
-
+          if (len !== 0) { dx /= len; dy /= len; }
           this.dashDir = { x: dx, y: dy };
-          this.dx = this.dashDir.x * P.DASH_SPEED;
-          this.dy = this.dashDir.y * P.DASH_SPEED;
-
-          context.camera.shake(4);
-          context.game.freezeFrames = 3;
-          context.particles.emitGhost(
-            this.x,
-            this.y,
-            this.width,
-            this.height,
-            Config.COLORS.DASH_ACTIVE
-          );
+          this.dx = this.dashDir.x * Config.PHYSICS.DASH_SPEED; this.dy = this.dashDir.y * Config.PHYSICS.DASH_SPEED;
+          context.camera.shake(4); context.game.freezeFrames = 3;
+          context.particles.emitGhost(this.x, this.y, this.width, this.height, Config.COLORS.DASH_ACTIVE);
         }
 
         _handlePhysics(context) {
-          const P = Config.PHYSICS;
-          const input = context.input;
-
-          if (this.isDashing) {
-            this._updateDashPhysics(context);
-          } else {
-            // Normal Movement
+          if (this.isDashing) this._updateDashPhysics(context);
+          else {
             let dir = 0;
-            if (input.isDown("a")) {
-              dir = -1;
-              this.facing = "left";
-            } else if (input.isDown("d")) {
-              dir = 1;
-              this.facing = "right";
-            }
-
-            // Horizontal Movement
+            if (context.input.isDown("a")) { dir = -1; this.facing = "left"; } else if (context.input.isDown("d")) { dir = 1; this.facing = "right"; }
             if (dir !== 0) {
-              if (
-                Math.abs(this.dx) > P.RUN_SPEED &&
-                Math.sign(this.dx) === dir
-              ) {
-                const friction = this.onGround
-                  ? P.GROUND_FRICTION
-                  : P.AIR_RESISTANCE;
+              if (Math.abs(this.dx) > Config.PHYSICS.RUN_SPEED && Math.sign(this.dx) === dir) {
+                const friction = this.onGround ? Config.PHYSICS.GROUND_FRICTION : Config.PHYSICS.AIR_RESISTANCE;
                 this.dx *= friction;
               } else {
-                this.dx += dir * P.ACCEL;
-                if (
-                  Math.abs(this.dx) > P.RUN_SPEED &&
-                  Math.sign(this.dx) === dir
-                ) {
-                  this.dx = dir * P.RUN_SPEED;
-                }
+                this.dx += dir * Config.PHYSICS.ACCEL;
+                if (Math.abs(this.dx) > Config.PHYSICS.RUN_SPEED && Math.sign(this.dx) === dir) this.dx = dir * Config.PHYSICS.RUN_SPEED;
               }
-            } else {
-              context.physics.applyFriction(this);
-            }
+            } else context.physics.applyFriction(this);
 
-            // Jump Execution
-            if (this.jumpBufferTimer > 0 && this.coyoteTimer > 0) {
-              this._jump(context, false);
-              this.jumpBufferTimer = 0;
-              this.coyoteTimer = 0;
-            }
-
-            // Wall Jump
-            if (this.onWall && this.wallJumps > 0 && input.isPressed("w")) {
-              this._jump(context, true);
-            }
+            if (this.jumpBufferTimer > 0 && this.coyoteTimer > 0) { this._jump(context, false); this.jumpBufferTimer = 0; this.coyoteTimer = 0; }
+            if (this.onWall && this.wallJumps > 0 && context.input.isPressed("w")) this._jump(context, true);
 
             context.physics.applyGravity(this);
             context.physics.resolveCollisions(this);
-
-            // Land Effect
-            if (this.onGround && this.dy === 0) {
-              // Logic to detect landing frame could be improved, but this works
-              // relying on previous frame dy is harder without storing it
-              // For now, we rely on the physics system to set onGround.
-              // We can check if we were in air last frame if we stored it.
-            }
-
-            // Refill resources
-            if (this.onGround) {
-              this.wallJumps = this.wallJumpsMax;
-              this.dashes = this.maxDashes;
-            }
+            if (this.onGround) { this.wallJumps = this.wallJumpsMax; this.dashes = this.maxDashes; }
           }
         }
 
         _updateDashPhysics(context) {
           this.dashFrameTimer--;
-          this.dx = this.dashDir.x * Config.PHYSICS.DASH_SPEED;
-          this.dy = this.dashDir.y * Config.PHYSICS.DASH_SPEED;
-
-          if (this.dashFrameTimer % 2 === 0) {
-            context.particles.emitGhost(
-              this.x,
-              this.y,
-              this.width,
-              this.height,
-              "rgba(255, 255, 255, 0.5)"
-            );
-          }
-
-          if (this.dashFrameTimer <= 0) {
-            this.isDashing = false;
-            this.dx *= 0.8;
-            this.dy *= 0.5;
-          }
-
-          // Custom collision for dash (stops on wall)
+          this.dx = this.dashDir.x * Config.PHYSICS.DASH_SPEED; this.dy = this.dashDir.y * Config.PHYSICS.DASH_SPEED;
+          if (this.dashFrameTimer % 2 === 0) context.particles.emitGhost(this.x, this.y, this.width, this.height, "rgba(255, 255, 255, 0.5)");
+          if (this.dashFrameTimer <= 0) { this.isDashing = false; this.dx *= 0.8; this.dy *= 0.5; }
           context.physics.resolveCollisions(this);
-          if (this.dx === 0 && this.dashDir.x !== 0) this.isDashing = false; // Hit wall
-          if (this.onGround && this.dashDir.y > 0) this.isDashing = false; // Hit floor
         }
 
         _jump(context, isWall) {
-          const P = Config.PHYSICS;
           if (isWall) {
             this.dashes = this.maxDashes;
-            const input = context.input;
-            if (this.isDashing && this.dashDir.y < 0) {
-              this.isDashing = false;
-              this.dy = P.JUMP_POWER * 1.3;
-            } else if (!input.isDown("a") && !input.isDown("d")) {
-              this.dy = P.JUMP_POWER;
-              this.dx = this.onWall === "left" ? 3 : -3;
-            } else {
-              this.dy = P.JUMP_POWER;
-              this.dx = this.onWall === "left" ? 6 : -6;
-            }
-            this.wallJumps--;
-            this.facing = this.onWall === "left" ? "right" : "left";
-            context.particles.emitDust(
-              this.onWall === "left" ? this.x : this.x + this.width,
-              this.y + this.height / 2
-            );
+            if (this.isDashing && this.dashDir.y < 0) { this.isDashing = false; this.dy = Config.PHYSICS.JUMP_POWER * 1.3; }
+            else if (!context.input.isDown("a") && !context.input.isDown("d")) { this.dy = Config.PHYSICS.JUMP_POWER; this.dx = this.onWall === "left" ? 3 : -3; }
+            else { this.dy = Config.PHYSICS.JUMP_POWER; this.dx = this.onWall === "left" ? 6 : -6; }
+            this.wallJumps--; this.facing = this.onWall === "left" ? "right" : "left";
+            context.particles.emitDust(this.onWall === "left" ? this.x : this.x + this.width, this.y + this.height / 2);
           } else {
-            if (this.isDashing) {
-              this.isDashing = false;
-              if (this.dashDir.y > 0) {
-                this.dy = P.JUMP_POWER * 0.6;
-                this.dx *= 1.2;
-                this.dashes = this.maxDashes;
-              } else {
-                this.dy = P.JUMP_POWER;
-              }
-            } else {
-              this.dy = P.JUMP_POWER;
-            }
-            context.particles.emitDust(
-              this.x + this.width / 2,
-              this.y + this.height
-            );
+            this.dy = Config.PHYSICS.JUMP_POWER;
+            context.particles.emitDust(this.x + this.width / 2, this.y + this.height);
           }
-          this.scaleX = 0.6;
-          this.scaleY = 1.4;
+          this.scaleX = 0.6; this.scaleY = 1.4;
         }
 
-        _shoot(context) {
-          const cx = this.x + this.width / 2;
-          const cy = this.y + this.height / 2;
-          const worldMouseX = context.input.mouse.x + context.camera.x;
-          const worldMouseY = context.input.mouse.y + context.camera.y;
-          const angle = Utils.getAngle(cx, cy, worldMouseX, worldMouseY);
-          const speed = 12;
-
-          const bullet = new Bullet(
-            cx,
-            cy,
-            Math.cos(angle) * speed,
-            Math.sin(angle) * speed,
-            true
-          );
-          context.bulletManager.add(bullet);
-
-          context.camera.shake(2);
-          context.particles.emitExplosion(
-            cx + Math.cos(angle) * 15,
-            cy + Math.sin(angle) * 15,
-            "#fff"
-          );
-        }
-
-        _checkWorldBounds() {
-          if (this.y > Config.WORLD.HEIGHT + 100) {
-            this.health = 0; // Fall death
-          }
-        }
+        _checkWorldBounds() { if (this.y > Config.WORLD.HEIGHT + 100) this.health = 0; }
       }
 
-      // --- ENEMY ---
       class Enemy extends Actor {
         constructor(x, y) {
           super(x, y, 24, 24, Config.COLORS.ENEMY, 100);
-          this.hasEyes = true;
-          this.eyeColor = Config.COLORS.ENEMY_EYES;
-          this.showHealthBar = true;
+          this.hasEyes = true; this.eyeColor = Config.COLORS.ENEMY_EYES; this.showHealthBar = true; this.deathTimer = 0;
+          this.wallJumps = 999; this.dashes = 1;
+          this.dashFrameTimer = 0; this.dashDir = {x:0, y:0}; this.dashCooldown = 0;
+          this.ai = new EnemyAI(this);
+          this.moveInput = { a: false, d: false, w: false };
+        }
+
+        takeDamage(amount) {
+           if (this.isDead) return;
+           super.takeDamage(amount);
+           if (this.health <= 0) {
+               this.isDead = true; this.health = 0; this.color = Config.COLORS.ENEMY_DEAD;
+               this.deathTimer = 30; this.showHealthBar = false; this.hasEyes = false;
+           }
+        }
+
+        shoot(context, angle) {
+            const speed = 10;
+            const bullet = new Bullet(this.x + this.width/2, this.y + this.height/2, Math.cos(angle)*speed, Math.sin(angle)*speed, false);
+            context.bulletManager.add(bullet);
+        }
+
+        dash(dx, dy, context) {
+            this.isDashing = true; this.dashes = 0; this.dashFrameTimer = Config.PHYSICS.DASH_DURATION;
+            this.dashDir = {x: dx, y: dy}; this.dx = dx * Config.PHYSICS.DASH_SPEED; this.dy = dy * Config.PHYSICS.DASH_SPEED;
+            this.dashCooldown = 60; context.particles.emitGhost(this.x, this.y, this.width, this.height, Config.COLORS.ENEMY_DASH);
         }
 
         update(context) {
+          if (this.isDead) {
+              this.dx = 0; this.dy = 0; this.deathTimer--;
+              if (this.deathTimer <= 0) { this.markedForDeletion = true; context.particles.emitExplosion(this.x + this.width/2, this.y + this.height/2, "#ff0000"); }
+              return;
+          }
+
           this.updateAnimation();
-          // Simple AI: Friction
-          this.dx *= Config.PHYSICS.FRICTION || 0.8;
-          context.physics.applyGravity(this);
-          context.physics.resolveCollisions(this);
+          this.moveInput = { a: false, d: false, w: false }; 
+          if(this.dashCooldown > 0) this.dashCooldown--; else if(this.onGround || this.onWall) this.dashes = 1;
+          this.ai.update(context);
+
+          if (this.isDashing) {
+              this.dashFrameTimer--;
+              this.dx = this.dashDir.x * Config.PHYSICS.DASH_SPEED; this.dy = this.dashDir.y * Config.PHYSICS.DASH_SPEED;
+              if (this.dashFrameTimer <= 0) { this.isDashing = false; this.dx *= 0.5; this.dy *= 0.5; }
+              context.physics.resolveCollisions(this);
+          } else {
+            if (this.moveInput.a) { this.dx -= Config.PHYSICS.ACCEL; this.facing = "left"; }
+            else if (this.moveInput.d) { this.dx += Config.PHYSICS.ACCEL; this.facing = "right"; }
+            else context.physics.applyFriction(this);
+
+            if (Math.abs(this.dx) > Config.PHYSICS.RUN_SPEED) this.dx = Math.sign(this.dx) * Config.PHYSICS.RUN_SPEED;
+            if(this.moveInput.w) {
+                if(this.onGround) this.dy = Config.PHYSICS.JUMP_POWER;
+                else if(this.onWall) { this.dy = Config.PHYSICS.JUMP_POWER; this.dx = this.onWall === "left" ? 6 : -6; }
+            }
+            context.physics.applyGravity(this);
+            context.physics.resolveCollisions(this);
+          }
         }
       }
 
-      // --- BULLET ---
       class Bullet extends Entity {
         constructor(x, y, dx, dy, isPlayer) {
-          super(x, y, 0, 0, "#fff"); // Size handled by radius
-          this.dx = dx;
-          this.dy = dy;
-          this.isPlayer = isPlayer;
-          this.radius = 3;
+          super(x, y, 0, 0, "#fff"); this.dx = dx; this.dy = dy; this.isPlayer = isPlayer; this.radius = 3;
         }
-        // Bullets handle their own movement simply
-        update(context) {
-          this.x += this.dx;
-          this.y += this.dy;
-        }
+        update(context) { this.x += this.dx; this.y += this.dy; }
       }
 
-      // --- BULLET MANAGER ---
       class BulletManager {
-        constructor() {
-          this.bullets = [];
-        }
-
-        add(bullet) {
-          this.bullets.push(bullet);
-        }
-
+        constructor() { this.bullets = []; }
+        add(bullet) { this.bullets.push(bullet); }
         update(context) {
           for (let i = this.bullets.length - 1; i >= 0; i--) {
-            const b = this.bullets[i];
-            b.update(context);
-
-            // Trail
-            context.particles.emitTrail(
-              b.x,
-              b.y,
-              b.isPlayer ? Config.COLORS.PLAYER : Config.COLORS.ENEMY,
-              b.radius
-            );
-
-            // Bounds Check
-            if (
-              b.x < 0 ||
-              b.x > Config.WORLD.WIDTH ||
-              b.y < 0 ||
-              b.y > Config.WORLD.HEIGHT
-            ) {
-              this.bullets.splice(i, 1);
-              continue;
-            }
-
-            // Platform Collision
+            const b = this.bullets[i]; b.update(context);
+            context.particles.emitTrail(b.x, b.y, b.isPlayer ? Config.COLORS.PLAYER : Config.COLORS.ENEMY, b.radius);
+            if (b.x < 0 || b.x > Config.WORLD.WIDTH || b.y < 0 || b.y > Config.WORLD.HEIGHT) { this.bullets.splice(i, 1); continue; }
             let hitPlat = false;
             for (let plat of context.level.platforms) {
-              if (
-                Utils.checkAABB(
-                  {
-                    x: b.x - b.radius,
-                    y: b.y - b.radius,
-                    width: b.radius * 2,
-                    height: b.radius * 2,
-                  },
-                  plat
-                )
-              ) {
-                hitPlat = true;
-                context.particles.emitExplosion(b.x, b.y, "#ccc");
-                break;
+              if (Utils.checkAABB({ x: b.x - b.radius, y: b.y - b.radius, width: b.radius * 2, height: b.radius * 2 }, plat)) {
+                hitPlat = true; context.particles.emitExplosion(b.x, b.y, "#ccc"); break;
               }
             }
-            if (hitPlat) {
-              this.bullets.splice(i, 1);
-              continue;
-            }
-
-            // Entity Collision
+            if (hitPlat) { this.bullets.splice(i, 1); continue; }
             if (b.isPlayer) {
               const enemies = context.game.enemies;
               for (let j = enemies.length - 1; j >= 0; j--) {
-                let e = enemies[j];
-                if (
-                  Utils.checkAABB(
-                    { x: b.x, y: b.y, width: b.radius, height: b.radius },
-                    e
-                  )
-                ) {
-                  e.takeDamage(20);
-                  context.particles.emitExplosion(b.x, b.y, Config.COLORS.ENEMY);
-                  this.bullets.splice(i, 1);
-
-                  if (e.health <= 0) {
-                    context.particles.emitExplosion(
-                      e.x + 12,
-                      e.y + 12,
-                      Config.COLORS.ENEMY
-                    );
-                    e.health = e.maxHealth; // Respawn logic
-                  }
-                  break;
+                let e = enemies[j]; if (e.isDead) continue;
+                if (Utils.checkAABB({ x: b.x, y: b.y, width: b.radius, height: b.radius }, e)) {
+                  e.takeDamage(20); context.particles.emitExplosion(b.x, b.y, Config.COLORS.ENEMY); this.bullets.splice(i, 1); break;
                 }
               }
+            } else {
+                const p = context.game.player;
+                if(Utils.checkAABB({x: b.x, y:b.y, width: b.radius, height: b.radius}, p)) {
+                    p.takeDamage(10); context.particles.emitExplosion(b.x, b.y, Config.COLORS.PLAYER); this.bullets.splice(i, 1);
+                }
             }
           }
         }
-
-        draw(renderSystem) {
-          this.bullets.forEach((b) => renderSystem.drawBullet(b));
-        }
+        draw(renderSystem) { this.bullets.forEach((b) => renderSystem.drawBullet(b)); }
       }
 
-      // ================== LEVEL DATA ==================
       class Level {
         constructor() {
-          const w = Config.WORLD.WIDTH;
-          const h = Config.WORLD.HEIGHT;
-
+          const w = Config.WORLD.WIDTH; const h = Config.WORLD.HEIGHT;
           this.platforms = [
-            { x: -40, y: 0, width: 40, height: h }, // Left Wall
-            { x: w, y: 0, width: 40, height: h }, // Right Wall
-            { x: 0, y: -40, width: w, height: 40 }, // Ceiling
-            { x: 0, y: h - 40, width: w, height: 80 }, // The Floor
-
-            // Bottom Zone
-            { x: 0, y: 1000, width: 250, height: 20 },
-            { x: 250, y: 900, width: 20, height: 120 },
-            { x: 400, y: 950, width: 150, height: 20 },
-            { x: 700, y: 850, width: 150, height: 20 },
-            { x: 1000, y: 950, width: 150, height: 20 },
-            { x: 1700, y: 600, width: 20, height: 600 }, // Shaft
-            { x: 1850, y: 800, width: 100, height: 20 },
-
-            // Mid
-            { x: 150, y: 750, width: 400, height: 20 },
-            { x: 800, y: 650, width: 400, height: 20 },
-            { x: 600, y: 500, width: 20, height: 250 },
-            { x: 1200, y: 500, width: 20, height: 250 },
-
-            // High
-            { x: 200, y: 550, width: 150, height: 20 },
-            { x: 50, y: 400, width: 200, height: 20 },
-            { x: 650, y: 350, width: 200, height: 20 },
-            { x: 1050, y: 350, width: 200, height: 20 },
-            { x: 1500, y: 250, width: 400, height: 20 },
+            { x: -40, y: 0, width: 40, height: h }, { x: w, y: 0, width: 40, height: h },
+            { x: 0, y: -40, width: w, height: 40 }, { x: 0, y: h - 40, width: w, height: 80 },
+            { x: 0, y: 1000, width: 250, height: 20 }, { x: 250, y: 900, width: 20, height: 120 },
+            { x: 400, y: 950, width: 150, height: 20 }, { x: 700, y: 850, width: 150, height: 20 },
+            { x: 1000, y: 950, width: 150, height: 20 }, { x: 1700, y: 600, width: 20, height: 600 },
+            { x: 1850, y: 800, width: 100, height: 20 }, { x: 150, y: 750, width: 400, height: 20 },
+            { x: 800, y: 650, width: 400, height: 20 }, { x: 600, y: 500, width: 20, height: 250 },
+            { x: 1200, y: 500, width: 20, height: 250 }, { x: 200, y: 550, width: 150, height: 20 },
+            { x: 50, y: 400, width: 200, height: 20 }, { x: 650, y: 350, width: 200, height: 20 },
+            { x: 1050, y: 350, width: 200, height: 20 }, { x: 1500, y: 250, width: 400, height: 20 },
             { x: 1400, y: 150, width: 20, height: 120 },
           ];
         }
       }
 
-      // ================== MAIN GAME CLASS ==================
       class Game {
         constructor() {
-          this.canvas = document.getElementById("game");
-          this.ctx = this.canvas.getContext("2d");
-
-          // Initialize Systems
-          this.input = new InputHandler(this.canvas);
-          this.camera = new Camera();
-          this.particles = new ParticleSystem();
-          this.level = new Level();
-          this.physics = new PhysicsSystem(this.level);
-          this.renderer = new RenderSystem(this.ctx, this.camera);
-          this.ui = new UIManager();
-          this.bulletManager = new BulletManager();
-
-          this.freezeFrames = 0;
-
-          this.reset();
-          this.loop = this.loop.bind(this);
-          requestAnimationFrame(this.loop);
+          this.canvas = document.getElementById("game"); this.ctx = this.canvas.getContext("2d");
+          this.input = new InputHandler(this.canvas); this.camera = new Camera();
+          this.particles = new ParticleSystem(); this.level = new Level();
+          this.physics = new PhysicsSystem(this.level); this.renderer = new RenderSystem(this.ctx, this.camera);
+          this.ui = new UIManager(); this.bulletManager = new BulletManager();
+          this.freezeFrames = 0; this.reset();
+          this.loop = this.loop.bind(this); requestAnimationFrame(this.loop);
         }
-
         reset() {
           this.player = new Player();
-          this.enemies = [new Enemy(450, 900)];
+          this.enemies = [
+              new Enemy(400, 900), new Enemy(600, 900), new Enemy(1200, 900),
+              new Enemy(200, 700), new Enemy(900, 600), new Enemy(1100, 300),
+              new Enemy(1600, 200), new Enemy(1800, 750)
+          ];
           this.bulletManager.bullets = [];
           this.ui.init(this.player.wallJumpsMax, this.player.maxDashes);
         }
-
-        // Context object passed to entities so they can access systems
-        // This acts as a Service Locator for the entities
-        get context() {
-          return {
-            input: this.input,
-            camera: this.camera,
-            particles: this.particles,
-            level: this.level,
-            physics: this.physics,
-            bulletManager: this.bulletManager,
-            game: this,
-          };
-        }
-
+        get context() { return { input: this.input, camera: this.camera, particles: this.particles, level: this.level, physics: this.physics, bulletManager: this.bulletManager, game: this }; }
         update() {
-          // Camera
-          this.camera.update(
-            this.player,
-            this.canvas.width,
-            this.canvas.height
-          );
-
-          // Particles
+          this.camera.update(this.player, this.canvas.width, this.canvas.height);
           this.particles.update();
-
-          // Player
           this.player.update(this.context);
-
-          // Enemies
-          this.enemies.forEach((e) => e.update(this.context));
-
-          // Bullets
+          for (let i = this.enemies.length - 1; i >= 0; i--) { const e = this.enemies[i]; e.update(this.context); if(e.markedForDeletion) this.enemies.splice(i, 1); }
           this.bulletManager.update(this.context);
+          
+          // NEW: Entity Collisions to prevent clumping
+          const allEntities = [this.player, ...this.enemies];
+          this.physics.resolveEntitySeparation(allEntities);
 
-          // UI
           this.ui.update(this.player);
-
-          // Input Cleanup
           this.input.clearFrame();
         }
-
         draw() {
           this.renderer.clear(this.canvas.width, this.canvas.height);
           this.renderer.begin();
-
           this.renderer.drawLevel(this.level);
           this.particles.draw(this.ctx);
-          this.enemies.forEach((e) =>
-            this.renderer.drawEntity(e, {
-              x: this.player.x + this.player.width / 2,
-              y: this.player.y + this.player.height / 2,
-            })
-          );
-          this.renderer.drawEntity(this.player, {
-            x: this.input.mouse.x + this.camera.x,
-            y: this.input.mouse.y + this.camera.y,
-          });
+          this.enemies.forEach((e) => this.renderer.drawEntity(e, { x: this.player.x + this.player.width / 2, y: this.player.y + this.player.height / 2 }));
+          this.renderer.drawEntity(this.player, { x: this.input.mouse.x + this.camera.x, y: this.input.mouse.y + this.camera.y });
           this.bulletManager.draw(this.renderer);
-
           this.renderer.end();
           this.renderer.drawCursor(this.input.mouse);
         }
-
         loop() {
-          if (this.freezeFrames > 0) {
-            this.freezeFrames--;
-            requestAnimationFrame(this.loop);
-            return;
-          }
-          this.update();
-          this.draw();
-          requestAnimationFrame(this.loop);
+          if (this.freezeFrames > 0) { this.freezeFrames--; requestAnimationFrame(this.loop); return; }
+          this.update(); this.draw(); requestAnimationFrame(this.loop);
         }
       }
 
-      // Start Game
       const game = new Game();
     </script>
   </body>
