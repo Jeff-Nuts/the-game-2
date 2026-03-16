@@ -5,111 +5,33 @@
     <title>Neon Square - AI & Collisions</title>
     <style>
       /* --- RESET & LAYOUT --- */
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-      body {
-        background: #050505;
-        overflow: hidden;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100vh;
-        color: #fff;
-        font-family: "Segoe UI", sans-serif;
-        user-select: none;
-      }
-
-      /* --- MAIN GAME CONTAINER --- */
-      #game-container {
-        position: relative;
-        width: 800px;
-        height: 450px;
-        background: #000;
-        box-shadow: 0 0 50px rgba(0, 243, 255, 0.1);
-        overflow: hidden;
-      }
-
-      canvas {
-        position: absolute;
-        top: 0;
-        left: 0;
-        display: block;
-        width: 100%;
-        height: 100%;
-        background: #0a0a10;
-        cursor: none;
-        z-index: 0;
-      }
-
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { background: #050505; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; color: #fff; font-family: "Segoe UI", sans-serif; user-select: none; }
+      #game-container { position: relative; width: 800px; height: 450px; background: #000; box-shadow: 0 0 50px rgba(0, 243, 255, 0.1); overflow: hidden; }
+      canvas { position: absolute; top: 0; left: 0; display: block; width: 100%; height: 100%; background: #0a0a10; cursor: none; z-index: 0; }
       /* UI HUD */
-      #ui-layer {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        z-index: 10;
-        pointer-events: none;
-      }
-
-      #ui-panel {
-        position: absolute;
-        top: 20px;
-        right: 20px;
-        width: 220px;
-        height: 140px;
-        background: rgba(0, 0, 0, 0.6);
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        border-radius: 10px;
-        padding: 15px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        gap: 12px;
-      }
-
-      .ui-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        font-size: 12px;
-        font-weight: bold;
-      }
+      #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
+      #ui-panel { position: absolute; top: 20px; right: 20px; width: 220px; height: 140px; background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 10px; padding: 15px; display: flex; flex-direction: column; justify-content: center; gap: 12px; }
+      .ui-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: bold; }
       .label { color: #fff; margin-right: 10px; min-width: 70px; }
       .hp-container { flex-grow: 1; height: 12px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); }
       #hp-fill { height: 100%; width: 100%; background-color: #ffff00; transition: width 0.1s linear, background-color 0.2s; }
-      
       .weapon-info { display: flex; flex-direction: column; align-items: flex-end; width: 100%; }
       #weapon-name { font-size: 10px; color: #aaa; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px; }
       .cd-container { width: 100px; height: 6px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); }
       #cd-fill { height: 100%; width: 100%; background-color: #00f3ff; transition: width 0.1s linear; }
-
       .pips-container { display: flex; gap: 4px; }
       .pip { width: 15px; height: 10px; background-color: #333; border-radius: 1px; transition: background-color 0.1s; }
       .pip.jump-active { background-color: #ffff00; box-shadow: 0 0 5px #ffff00; }
       .pip.dash-active { background-color: #00f3ff; box-shadow: 0 0 5px #00f3ff; }
-
       /* CINEMATIC & FADE */
-      #cinematic-layer {
-        position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 20; pointer-events: none;
-        display: flex; flex-direction: column; justify-content: space-between; opacity: 0; transition: opacity 0.5s ease;
-      }
+      #cinematic-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 20; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; opacity: 0; transition: opacity 0.5s ease; }
       #cinematic-layer.active { opacity: 1; }
       .cine-bar { width: 100%; height: 0; background-color: #000; transition: height 0.5s ease; }
       #cinematic-layer.active .cine-bar { height: 60px; }
-      #dialogue-box {
-        position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 600px;
-        background: rgba(0,0,0,0.8); border: 1px solid #fff; padding: 20px; text-align: center;
-        font-family: "Courier New", monospace; display: none;
-      }
+      #dialogue-box { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 600px; background: rgba(0,0,0,0.8); border: 1px solid #fff; padding: 20px; text-align: center; font-family: "Courier New", monospace; display: none; }
       #cinematic-layer.active #dialogue-box { display: block; }
-      #fade-overlay {
-        position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000;
-        z-index: 30; opacity: 0; pointer-events: none; transition: opacity 1s ease;
-      }
+      #fade-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 30; opacity: 0; pointer-events: none; transition: opacity 1s ease; }
       #fade-overlay.black { opacity: 1; }
     </style>
   </head>
@@ -124,227 +46,27 @@
           <div class="ui-row"><span class="label">Weapon</span><div class="weapon-info"><span id="weapon-name">Pellets</span><div class="cd-container"><div id="cd-fill"></div></div></div></div>
         </div>
       </div>
-      <div id="cinematic-layer">
-        <div class="cine-bar top"></div>
-        <div id="dialogue-box">System Initialized...</div>
-        <div class="cine-bar bottom"></div>
-      </div>
-      <div id="fade-overlay"></div>
     </div>
 
     <script>
       // ================== CONFIGURATION ==================
       class Config {
-        static PHYSICS = {
-          GRAVITY: 0.6,
-          RUN_SPEED: 4.0,
-          ACCEL: 1.5,
-          GROUND_FRICTION: 0.8,
-          AIR_RESISTANCE: 0.97,
-          WALL_SLIDE_SPEED: 2,
-          TERMINAL_VELOCITY: 18,
-          DASH_SPEED: 18.0,
-          DASH_DURATION: 10,
-          DASH_REGEN_TIME: 30,
-          JUMP_POWER: -13,
-          JUMP_CUTOFF: 0.5,
-          ENTITY_REPULSION: 1.5 // Strength of characters pushing each other
-        };
-
-        static WORLD = {
-          WIDTH: 2000,
-          HEIGHT: 1200,
-        };
-
-        static COLORS = {
-          BG: "#0a0a10",
-          PLAYER: "#FFFF00",
-          PLAYER_EYES: "#000000",
-          ENEMY: "#ff0055",
-          ENEMY_DEAD: "#800080",
-          ENEMY_EYES: "#330000",
-          WALL: "#1e1e24",
-          WALL_GLOW: "rgba(0, 0, 0, 0)",
-          DASH_ACTIVE: "#00f3ff",
-          ENEMY_DASH: "#ff5500",
-        };
+        static PHYSICS = { GRAVITY: 0.6, RUN_SPEED: 4.0, ACCEL: 1.5, GROUND_FRICTION: 0.8, AIR_RESISTANCE: 0.97, WALL_SLIDE_SPEED: 2, TERMINAL_VELOCITY: 18, DASH_SPEED: 18.0, DASH_DURATION: 10, DASH_REGEN_TIME: 30, JUMP_POWER: -13, JUMP_CUTOFF: 0.5, ENTITY_REPULSION: 1.5 };
+        static WORLD = { WIDTH: 2000, HEIGHT: 1200 };
+        static COLORS = { BG: "#0a0a10", PLAYER: "#FFFF00", PLAYER_EYES: "#000000", ENEMY: "#ff0055", ENEMY_DEAD: "#800080", ENEMY_EYES: "#330000", WALL: "#1e1e24", WALL_GLOW: "rgba(0, 0, 0, 0)", DASH_ACTIVE: "#00f3ff", ENEMY_DASH: "#ff5500" };
       }
 
       // ================== UTILITIES ==================
       class Utils {
         static rand(min, max) { return Math.random() * (max - min) + min; }
         static lerp(start, end, amt) { return (1 - amt) * start + amt * end; }
-        
-        static checkAABB(rect1, rect2) {
-          return (
-            rect1.x < rect2.x + rect2.width &&
-            rect1.x + rect1.width > rect2.x &&
-            rect1.y < rect2.y + rect2.height &&
-            rect1.y + rect1.height > rect2.y
-          );
-        }
-
+        static checkAABB(rect1, rect2) { return ( rect1.x < rect2.x + rect2.width && rect1.x + rect1.width > rect2.x && rect1.y < rect2.y + rect2.height && rect1.y + rect1.height > rect2.y ); }
         static getAngle(x1, y1, x2, y2) { return Math.atan2(y2 - y1, x2 - x1); }
         static dist(x1, y1, x2, y2) { return Math.sqrt(Math.pow(x2-x1, 2) + Math.pow(y2-y1, 2)); }
-        
-        static rayCast(p1, p2, platforms) {
-            const dist = Utils.dist(p1.x, p1.y, p2.x, p2.y);
-            const steps = Math.ceil(dist / 10);
-            const dx = (p2.x - p1.x) / steps;
-            const dy = (p2.y - p1.y) / steps;
-            let cx = p1.x; let cy = p1.y;
-            for(let i=0; i<steps; i++) {
-                cx += dx; cy += dy;
-                for(const plat of platforms) {
-                    if (cx > plat.x && cx < plat.x + plat.width && cy > plat.y && cy < plat.y + plat.height) {
-                        return { hit: true, x: cx, y: cy };
-                    }
-                }
-            }
-            return { hit: false };
-        }
-
         static lineIntersectsRect(p1, p2, rect) {
             if (p1.x > rect.x && p1.x < rect.x + rect.width && p1.y > rect.y && p1.y < rect.y + rect.height) return true;
             if (p2.x > rect.x && p2.x < rect.x + rect.width && p2.y > rect.y && p2.y < rect.y + rect.height) return true;
             return false;
-        }
-      }
-
-      // ================== PHYSICS & TRAJECTORY ==================
-      class Trajectory {
-        static simulate(startX, startY, width, height, vx, vy, steps, context, gravity = Config.PHYSICS.GRAVITY) {
-            let cx = startX, cy = startY, cvx = vx, cvy = vy;
-            const path = [];
-            let landedOn = null;
-            for(let i=0; i<steps; i++) {
-                cvy += gravity; cvx *= Config.PHYSICS.AIR_RESISTANCE;
-                let nx = cx + cvx; let ny = cy + cvy;
-                let colX = false; let colY = false;
-                if (nx < 0 || nx > Config.WORLD.WIDTH) { colX = true; }
-                for(const plat of context.level.platforms) {
-                    if(Utils.checkAABB({x: nx, y: cy, width: width, height: height}, plat)) { colX = true; cvx = 0; }
-                }
-                nx = colX ? cx : nx;
-                for(const plat of context.level.platforms) {
-                    if(Utils.checkAABB({x: nx, y: ny, width: width, height: height}, plat)) {
-                        colY = true;
-                        if(cvy > 0) { landedOn = plat; return { success: true, landedOn: plat, path: path }; }
-                        cvy = 0;
-                    }
-                }
-                if(colY) ny = cy;
-                cx = nx; cy = ny;
-                path.push({x: cx, y: cy});
-            }
-            return { success: false, path: path };
-        }
-      }
-
-      // ================== AI SYSTEM ==================
-      class EnemyAI {
-        constructor(enemy) {
-            this.enemy = enemy;
-            this.state = "THINK";
-            this.targetPoint = null;
-            this.pathTimer = 0;
-            this.shootTimer = 0;
-            this.repathTimer = 0;
-            this.tacticalPoints = [];
-            this.initialized = false;
-        }
-
-        init(level) {
-            const resolution = 100;
-            level.platforms.forEach(p => {
-                if(p.width > 40) {
-                    for(let x = p.x + 20; x < p.x + p.width - 20; x += resolution) {
-                        this.tacticalPoints.push({ x: x, y: p.y - this.enemy.height - 2, platform: p });
-                    }
-                }
-            });
-            this.initialized = true;
-        }
-
-        update(context) {
-            if(!this.initialized) this.init(context.level);
-            if(this.enemy.isDead) return;
-
-            const player = context.game.player;
-            const distToPlayer = Utils.dist(this.enemy.x, this.enemy.y, player.x, player.y);
-            const los = this._checkLOS(this.enemy, player, context.level.platforms);
-            
-            if(los) {
-                this.shootTimer--;
-                if(this.shootTimer <= 0) {
-                    const angle = Utils.getAngle(this.enemy.x + this.enemy.width/2, this.enemy.y + this.enemy.height/2, player.x + player.width/2, player.y + player.height/2);
-                    const spread = (Math.random() - 0.5) * 0.2;
-                    this.enemy.shoot(context, angle + spread);
-                    this.shootTimer = 15;
-                }
-            }
-
-            this.repathTimer--;
-            if(this.state === "THINK" || this.repathTimer <= 0) {
-                this._findBestPosition(context, player);
-                this.repathTimer = 60;
-            }
-            if(this.state === "MOVE" && this.targetPoint) {
-                this._executeMovement(context);
-            }
-        }
-
-        _checkLOS(entity1, entity2, platforms) {
-            const start = {x: entity1.x + entity1.width/2, y: entity1.y + entity1.height/2};
-            const end = {x: entity2.x + entity2.width/2, y: entity2.y + entity2.height/2};
-            const res = Utils.rayCast(start, end, platforms);
-            return !res.hit;
-        }
-
-        _findBestPosition(context, player) {
-            let bestScore = -999999;
-            let bestPoint = null;
-            for(const pt of this.tacticalPoints) {
-                let score = 0;
-                const d = Utils.dist(pt.x, pt.y, player.x, player.y);
-                if(d < 300) score -= 1000; else score += d * 2;
-                const dummy = {x: pt.x, y: pt.y, width: 1, height: 1};
-                if(this._checkLOS(dummy, player, context.level.platforms)) score += 5000; else score -= 2000;
-                if(pt.y < player.y) score += 500;
-                const distFromSelf = Utils.dist(this.enemy.x, this.enemy.y, pt.x, pt.y);
-                if(distFromSelf > 800) score -= 2000;
-                if(score > bestScore) { bestScore = score; bestPoint = pt; }
-            }
-            if(bestPoint) { this.targetPoint = bestPoint; this.state = "MOVE"; }
-        }
-
-        _executeMovement(context) {
-            const ex = this.enemy.x; const ey = this.enemy.y;
-            const tx = this.targetPoint.x; const ty = this.targetPoint.y;
-            const dx = tx - ex; const dy = ty - ey;
-            const dist = Math.sqrt(dx*dx + dy*dy);
-            if(dist < 30) { this.enemy.dx *= 0.8; return; }
-
-            if(Math.abs(dy) < 50 && this.enemy.onGround) {
-                if(dx > 0) this.enemy.moveInput.d = true; else this.enemy.moveInput.a = true;
-                if(!this.enemy.onGround) this.enemy.moveInput.w = true;
-            } else {
-                if(this.enemy.dashes > 0 && !this.enemy.isDashing) {
-                    const dashSpeed = Config.PHYSICS.DASH_SPEED;
-                    const dirs = [{x: 1, y: 0}, {x: -1, y: 0}, {x: 0, y: -1}, {x: 1, y: -1}, {x: -1, y: -1}, {x: 1, y: 1}, {x: -1, y: 1}];
-                    for(const dir of dirs) {
-                        const sim = Trajectory.simulate(ex, ey, this.enemy.width, this.enemy.height, dir.x * dashSpeed, dir.y * dashSpeed, 15, context, 0);
-                        if(sim.path.length > 0) {
-                            const endPos = sim.path[sim.path.length-1];
-                            const newDist = Utils.dist(endPos.x, endPos.y, tx, ty);
-                            if(newDist < dist - 100) { this.enemy.dash(dir.x, dir.y, context); return; }
-                        }
-                    }
-                }
-                if(dx > 0) this.enemy.moveInput.d = true; else this.enemy.moveInput.a = true;
-                if(this.enemy.onWall) { if(ty < ey) this.enemy.moveInput.w = true; } 
-                else if (this.enemy.onGround && ty < ey - 50) this.enemy.moveInput.w = true;
-            }
         }
       }
 
@@ -372,21 +94,12 @@
 
       class PhysicsSystem {
         constructor(level) { this.level = level; }
-        
         applyGravity(entity) { entity.dy += Config.PHYSICS.GRAVITY; }
-        
-        applyFriction(entity) {
-          const friction = entity.onGround ? Config.PHYSICS.GROUND_FRICTION : Config.PHYSICS.AIR_RESISTANCE;
-          entity.dx *= friction;
-          if (Math.abs(entity.dx) < 0.1) entity.dx = 0;
-        }
-
+        applyFriction(entity) { const friction = entity.onGround ? Config.PHYSICS.GROUND_FRICTION : Config.PHYSICS.AIR_RESISTANCE; entity.dx *= friction; if (Math.abs(entity.dx) < 0.1) entity.dx = 0; }
         resolveCollisions(entity) {
           if (entity.onWall && entity.dy > 0 && !entity.onGround) entity.dy = Config.PHYSICS.WALL_SLIDE_SPEED;
-          let nextX = entity.x + entity.dx;
-          let nextY = entity.y + entity.dy;
+          let nextX = entity.x + entity.dx; let nextY = entity.y + entity.dy;
           entity.onGround = false; entity.onWall = false;
-
           for (const plat of this.level.platforms) {
             if (Utils.checkAABB({ x: nextX, y: entity.y, width: entity.width, height: entity.height }, plat)) {
               if (entity.dx > 0) { nextX = plat.x - entity.width; entity.onWall = "right"; }
@@ -405,46 +118,18 @@
           if (entity.x < 0) entity.x = 0;
           if (entity.x > Config.WORLD.WIDTH - entity.width) entity.x = Config.WORLD.WIDTH - entity.width;
         }
-
-        // NEW: Handles collisions between entities (Player <-> Enemy, Enemy <-> Enemy)
         resolveEntitySeparation(entities) {
             for (let i = 0; i < entities.length; i++) {
                 for (let j = i + 1; j < entities.length; j++) {
-                    const e1 = entities[i];
-                    const e2 = entities[j];
-
-                    if (e1.isDead || e2.isDead) continue; // Don't collide with corpses
-
+                    const e1 = entities[i]; const e2 = entities[j];
+                    if (e1.isDead || e2.isDead) continue; 
                     if (Utils.checkAABB(e1, e2)) {
-                        // Calculate center difference
-                        const cx1 = e1.x + e1.width / 2;
-                        const cy1 = e1.y + e1.height / 2;
-                        const cx2 = e2.x + e2.width / 2;
-                        const cy2 = e2.y + e2.height / 2;
-
-                        let dx = cx1 - cx2;
-                        let dy = cy1 - cy2;
-                        let dist = Math.sqrt(dx * dx + dy * dy);
-
-                        // Avoid division by zero
+                        const cx1 = e1.x + e1.width / 2; const cy1 = e1.y + e1.height / 2;
+                        const cx2 = e2.x + e2.width / 2; const cy2 = e2.y + e2.height / 2;
+                        let dx = cx1 - cx2; let dy = cy1 - cy2; let dist = Math.sqrt(dx * dx + dy * dy);
                         if (dist === 0) { dx = 1; dy = 0; dist = 1; }
-
-                        // Push apart
-                        // Overlap depth approx
-                        const minDist = (e1.width + e2.width) / 2; // Simple radius approximation
-                        
-                        // Normalized vector
-                        const nx = dx / dist;
-                        const ny = dy / dist;
-
-                        // Repulsion force
-                        const force = Config.PHYSICS.ENTITY_REPULSION;
-
-                        // Apply to velocities (soft collision)
-                        e1.dx += nx * force;
-                        e1.dy += ny * force;
-                        e2.dx -= nx * force;
-                        e2.dy -= ny * force;
+                        const nx = dx / dist; const ny = dy / dist; const force = Config.PHYSICS.ENTITY_REPULSION;
+                        e1.dx += nx * force; e1.dy += ny * force; e2.dx -= nx * force; e2.dy -= ny * force;
                     }
                 }
             }
@@ -456,7 +141,6 @@
         clear(width, height) { this.ctx.fillStyle = Config.COLORS.BG; this.ctx.fillRect(0, 0, width, height); }
         begin() { this.ctx.save(); this.ctx.translate(-this.camera.x, -this.camera.y); }
         end() { this.ctx.restore(); }
-        
         drawLevel(level) {
           this.ctx.beginPath();
           for (const p of level.platforms) this.ctx.rect(p.x, p.y, p.width, p.height);
@@ -464,20 +148,16 @@
           this.ctx.shadowColor = Config.COLORS.WALL_GLOW; this.ctx.shadowBlur = 10;
           this.ctx.fill(); this.ctx.shadowBlur = 0;
         }
-
         drawEntity(entity, targetPoint) {
           if(entity.isDead && !entity.markedForDeletion) { this.ctx.globalAlpha = 0.5; }
           this.ctx.save();
           const cx = entity.x + entity.width / 2; const cy = entity.y + entity.height;
           this.ctx.translate(cx, cy); this.ctx.scale(entity.scaleX, entity.scaleY); this.ctx.translate(-cx, -cy);
-
           this.ctx.fillStyle = entity.color;
           if (entity.hitFlashTimer > 0) this.ctx.fillStyle = "#fff";
           if (entity.isDashing) this.ctx.fillStyle = "#fff";
-
           this.ctx.shadowBlur = 6; this.ctx.shadowColor = entity.color;
           this.ctx.fillRect(entity.x, entity.y, entity.width, entity.height);
-
           if (entity.hasEyes) {
             const targetX = targetPoint ? targetPoint.x : entity.x;
             const targetY = targetPoint ? targetPoint.y : entity.y;
@@ -487,7 +167,6 @@
           if (entity.currentWeapon && !entity.isDead) entity.currentWeapon.draw(this.ctx, entity, targetPoint);
           this.ctx.restore(); this.ctx.globalAlpha = 1.0;
         }
-
         _drawEyes(entity, targetX, targetY, color) {
           if(entity.isDead) return;
           const es = 4; const esp = 6; const cx = entity.x + entity.width / 2; const cy = entity.y + entity.height / 3;
@@ -498,7 +177,6 @@
           this.ctx.fillRect(cx - esp + mx - es / 2, cy + my - es / 2, es, es);
           this.ctx.fillRect(cx + esp + mx - es / 2, cy + my - es / 2, es, es);
         }
-
         _drawHealthBar(entity) {
           if (entity.isDead) return;
           const hpPct = Math.max(0, entity.health / entity.maxHealth);
@@ -507,14 +185,12 @@
           this.ctx.fillStyle = "#f00";
           this.ctx.fillRect(entity.x, entity.y - 8, entity.width * hpPct, 3);
         }
-
         drawBullet(bullet) {
           this.ctx.fillStyle = bullet.isPlayer ? "#fff" : "#ffaaaa";
           this.ctx.shadowBlur = 8;
           this.ctx.shadowColor = bullet.isPlayer ? Config.COLORS.PLAYER : Config.COLORS.ENEMY;
           this.ctx.beginPath(); this.ctx.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2); this.ctx.fill();
         }
-
         drawCursor(mouse) {
           this.ctx.shadowBlur = 4; this.ctx.shadowColor = "#fff"; this.ctx.strokeStyle = "#fff"; this.ctx.lineWidth = 1;
           const mx = mouse.x; const my = mouse.y;
@@ -548,31 +224,21 @@
       }
 
       class ParticleSystem {
-        constructor() { this.particles = []; }
-        update() {
-          for (let i = this.particles.length - 1; i >= 0; i--) {
-            this.particles[i].update(); if (this.particles[i].life <= 0) this.particles.splice(i, 1);
-          }
-        }
+        constructor() { this.particles =[]; }
+        update() { for (let i = this.particles.length - 1; i >= 0; i--) { this.particles[i].update(); if (this.particles[i].life <= 0) this.particles.splice(i, 1); } }
         draw(ctx) { this.particles.forEach((p) => p.draw(ctx)); }
         emitDust(x, y) { for (let i = 0; i < 4; i++) this.particles.push(new Particle(x, y, "dust", "#888")); }
         emitExplosion(x, y, color) { for (let i = 0; i < 12; i++) this.particles.push(new Particle(x, y, "spark", color)); }
         emitTrail(x, y, color, size) { if (Math.random() > 0.3) this.particles.push(new Particle(x, y, "trail", color, size)); }
-        emitGhost(x, y, width, height, color) {
-          const p = new Particle(x + width / 2, y + height / 2, "trail", color, width);
-          p.decay = 0.15; this.particles.push(p);
-        }
+        emitGhost(x, y, width, height, color) { const p = new Particle(x + width / 2, y + height / 2, "trail", color, width); p.decay = 0.15; this.particles.push(p); }
       }
 
       class UIManager {
         constructor() {
-          this.uiLayer = document.getElementById("ui-layer");
-          this.hpFill = document.getElementById("hp-fill");
-          this.jumpsContainer = document.getElementById("jumps-container");
-          this.dashesContainer = document.getElementById("dashes-container");
-          this.weaponNameEl = document.getElementById("weapon-name");
-          this.cdFill = document.getElementById("cd-fill");
-          this.jumpPips = []; this.dashPips = [];
+          this.uiLayer = document.getElementById("ui-layer"); this.hpFill = document.getElementById("hp-fill");
+          this.jumpsContainer = document.getElementById("jumps-container"); this.dashesContainer = document.getElementById("dashes-container");
+          this.weaponNameEl = document.getElementById("weapon-name"); this.cdFill = document.getElementById("cd-fill");
+          this.jumpPips =[]; this.dashPips =[];
         }
         init(maxJumps, maxDashes) {
           this._createPips(this.jumpsContainer, this.jumpPips, maxJumps);
@@ -601,7 +267,7 @@
 
       class Camera {
         constructor() { this.x = 0; this.y = 0; this.shakePower = 0; }
-        shake(amount) { this.shakePower = amount; }
+        shake(amount) { this.shakePower = Math.max(this.shakePower, amount); }
         update(target, canvasWidth, canvasHeight) {
           let targetX = target.x + target.width / 2 - canvasWidth / 2;
           let targetY = target.y + target.height / 2 - canvasHeight / 2;
@@ -616,8 +282,12 @@
         }
       }
 
+      // ================== OOP WEAPON SYSTEM ==================
       class Weapon {
-        constructor(name, cooldownTime, isAuto) { this.name = name; this.cooldownTime = cooldownTime; this.cooldownTimer = 0; this.isUnlimited = cooldownTime === 0; this.isAuto = isAuto; }
+        constructor(name, cooldownTime, isAuto) { 
+            this.name = name; this.cooldownTime = cooldownTime; this.cooldownTimer = 0; 
+            this.isUnlimited = cooldownTime === 0; this.isAuto = isAuto; 
+        }
         update(context, owner) { if (this.cooldownTimer > 0) this.cooldownTimer--; }
         canAttack() { return this.cooldownTimer <= 0; }
         attack(context, owner) {}
@@ -626,8 +296,14 @@
 
       class PelletGun extends Weapon {
         constructor() { super("Pellets", 0, true); this.internalCooldown = 0; }
-        update(context, owner) { super.update(context, owner); if (this.internalCooldown > 0) this.internalCooldown--; }
+        
+        update(context, owner) { 
+            super.update(context, owner); 
+            if (this.internalCooldown > 0) this.internalCooldown--; 
+        }
+        
         canAttack() { return this.internalCooldown <= 0; }
+        
         attack(context, owner) {
             this.internalCooldown = 8;
             const cx = owner.x + owner.width / 2; const cy = owner.y + owner.height / 2;
@@ -636,6 +312,7 @@
             const angle = Utils.getAngle(cx, cy, worldMouseX, worldMouseY);
             this.fire(context, owner, angle);
         }
+        
         fire(context, owner, angle) {
             const speed = 12;
             const bullet = new Bullet(owner.x + owner.width/2, owner.y + owner.height/2, Math.cos(angle) * speed, Math.sin(angle) * speed, owner instanceof Player);
@@ -645,63 +322,266 @@
                 context.particles.emitExplosion(owner.x + owner.width/2 + Math.cos(angle) * 15, owner.y + owner.height/2 + Math.sin(angle) * 15, "#fff");
             }
         }
+
+        draw(ctx, owner, targetPoint) {
+            const cx = owner.x + owner.width / 2;
+            const cy = owner.y + owner.height / 2;
+            const angle = Math.atan2(targetPoint.y - cy, targetPoint.x - cx);
+
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(angle);
+
+            // Flip the gun if pointing backwards (left)
+            if (Math.abs(angle) > Math.PI / 2) {
+                ctx.scale(1, -1);
+            }
+
+            // Visual Recoil snap-back
+            const recoil = this.internalCooldown > 0 ? (this.internalCooldown / 8) * 3 : 0;
+            ctx.translate(15 - recoil, 0);
+
+            // Gun Grip
+            ctx.fillStyle = "#222"; 
+            ctx.fillRect(-2, 2, 6, 8);
+            
+            // Gun Body
+            ctx.fillStyle = "#444"; 
+            ctx.fillRect(-6, -4, 18, 6);
+            
+            // Neon Cyan Accent Strip
+            ctx.fillStyle = "#00f3ff"; 
+            ctx.shadowBlur = 5;
+            ctx.shadowColor = "#00f3ff";
+            ctx.fillRect(4, -2, 6, 2);
+
+            ctx.restore();
+        }
       }
 
-      class LongSword extends Weapon {
-          constructor() { super("Long Sword", 15, false); this.swinging = false; this.swingTimer = 0; this.swingDuration = 25; this.bladeLength = 80; this.damage = 40; this.hitList = []; this.targetAngle = 0; this.swingDir = 1; }
+      class Shotgun extends Weapon {
+        constructor() { super("Shotgun", 40, false); }
+        
+        attack(context, owner) {
+            this.cooldownTimer = this.cooldownTime;
+            const cx = owner.x + owner.width / 2; const cy = owner.y + owner.height / 2;
+            let targetX = owner instanceof Player ? context.input.mouse.x + context.camera.x : context.game.player.x + context.game.player.width/2;
+            let targetY = owner instanceof Player ? context.input.mouse.y + context.camera.y : context.game.player.y + context.game.player.height/2;
+            
+            const baseAngle = Utils.getAngle(cx, cy, targetX, targetY);
+            const pelletCount = 6; const spreadDegrees = 0.5; 
+            
+            for(let i = 0; i < pelletCount; i++) {
+                const angle = baseAngle - (spreadDegrees/2) + (Math.random() * spreadDegrees);
+                const speed = Utils.rand(12, 18); 
+                const bullet = new Bullet(cx, cy, Math.cos(angle) * speed, Math.sin(angle) * speed, owner instanceof Player);
+                context.bulletManager.add(bullet);
+            }
+            if(owner instanceof Player) {
+                context.camera.shake(8);
+                context.particles.emitExplosion(cx + Math.cos(baseAngle)*20, cy + Math.sin(baseAngle)*20, "#FFAA00");
+                owner.dx -= Math.cos(baseAngle) * 5; owner.dy -= Math.sin(baseAngle) * 5;
+            }
+        }
+
+        draw(ctx, owner, targetPoint) {
+            const cx = owner.x + owner.width / 2;
+            const cy = owner.y + owner.height / 2;
+            const angle = Math.atan2(targetPoint.y - cy, targetPoint.x - cx);
+
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(angle);
+
+            // Flip gun if pointing left
+            if (Math.abs(angle) > Math.PI / 2) {
+                ctx.scale(1, -1);
+            }
+
+            // Heavy Recoil! (Kicks back hard for 10 frames)
+            let recoil = 0;
+            if (this.cooldownTimer > 30) {
+                recoil = ((this.cooldownTimer - 30) / 10) * 8;
+            }
+            ctx.translate(15 - recoil, 0);
+
+            // Back Stock
+            ctx.fillStyle = "#111";
+            ctx.fillRect(-8, 0, 8, 6);
+
+            // Main Body Housing
+            ctx.fillStyle = "#333";
+            ctx.fillRect(-4, -4, 14, 8);
+
+            // Heavy Double Barrels
+            ctx.fillStyle = "#555";
+            ctx.fillRect(10, -4, 16, 6);
+
+            // Pump Grip
+            ctx.fillStyle = "#222";
+            ctx.fillRect(10, 2, 10, 3);
+
+            // Glowing Orange Shotgun Core
+            ctx.fillStyle = "#FFAA00";
+            ctx.shadowBlur = 5;
+            ctx.shadowColor = "#FFAA00";
+            ctx.fillRect(2, -2, 4, 4);
+
+            ctx.restore();
+        }
+      }
+
+      class VoltKatana extends Weapon {
+          constructor() { 
+              super("Volt Katana", 12, false); 
+              this.comboStep = 0; this.comboTimer = 0;
+              this.isSwinging = false; this.swingTimer = 0; this.swingDuration = 10;
+              this.hitboxRange = 90; this.hitList =[]; this.targetAngle = 0; this.swingDir = 1; 
+              this.slashEffects =[]; 
+          }
+          
           update(context, owner) {
               super.update(context, owner);
-              if (this.swinging) {
+              if (this.comboTimer > 0) {
+                  this.comboTimer--;
+                  if (this.comboTimer <= 0 && !this.isSwinging) this.comboStep = 0;
+              }
+              for (let i = this.slashEffects.length - 1; i >= 0; i--) {
+                  this.slashEffects[i].life--;
+                  if (this.slashEffects[i].life <= 0) this.slashEffects.splice(i, 1);
+              }
+              if (this.isSwinging) {
                   this.swingTimer--;
                   const progress = 1 - (this.swingTimer / this.swingDuration);
-                  const currentAngle = Utils.lerp(this.targetAngle - 1.4 * this.swingDir, this.targetAngle + 1.4 * this.swingDir, progress);
-                  this._checkCollisions(context, owner, currentAngle);
-                  if (this.swingTimer <= 0) this.swinging = false;
+                  if (progress > 0.1 && progress < 0.9) this._checkCollisions(context, owner);
+                  if (this.swingTimer <= 0) this.isSwinging = false;
               }
           }
-          _checkCollisions(context, owner, currentAngle) {
-            const cx = owner.x + owner.width/2; const cy = owner.y + owner.height/2;
-            const p1 = { x: cx + Math.cos(currentAngle) * 16, y: cy + Math.sin(currentAngle) * 16 };
-            const p2 = { x: cx + Math.cos(currentAngle) * (16 + this.bladeLength), y: cy + Math.sin(currentAngle) * (16 + this.bladeLength) };
-            const targets = owner instanceof Player ? context.game.enemies : [context.game.player];
-            targets.forEach(e => {
-                if (this.hitList.includes(e) || e.isDead) return;
-                if (Utils.lineIntersectsRect(p1, p2, e)) {
-                    this.hitList.push(e); e.takeDamage(this.damage);
-                    const angleToEnemy = Math.atan2((e.y + e.height/2) - cy, (e.x + e.width/2) - cx);
-                    e.dx = Math.cos(angleToEnemy) * 10; e.dy = Math.sin(angleToEnemy) * 10 - 2;
-                    if(owner instanceof Player) context.camera.shake(5);
-                    context.particles.emitExplosion(e.x + e.width/2, e.y + e.height/2, "#fff");
-                }
-            });
+          
+          _checkCollisions(context, owner) {
+              const cx = owner.x + owner.width / 2; const cy = owner.y + owner.height / 2;
+              const targets = owner instanceof Player ? context.game.enemies : [context.game.player];
+              const isSpin = this.slashEffects.length > 0 && this.slashEffects[this.slashEffects.length-1].isSpin;
+              const damage = isSpin ? 60 : 30; const knockback = isSpin ? 16 : 8;
+
+              targets.forEach(e => {
+                  if (this.hitList.includes(e) || e.isDead) return;
+                  const ex = e.x + e.width/2; const ey = e.y + e.height/2;
+                  const dist = Math.hypot(ex - cx, ey - cy);
+
+                  if (dist < this.hitboxRange + Math.max(e.width, e.height)/2) {
+                      let hit = false;
+                      if (isSpin) hit = true; 
+                      else {
+                          const angleToEnemy = Math.atan2(ey - cy, ex - cx);
+                          let diff = angleToEnemy - this.targetAngle;
+                          diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+                          if (Math.abs(diff) < 1.2) hit = true;
+                      }
+
+                      if (hit) {
+                          this.hitList.push(e); e.takeDamage(damage);
+                          const angleToEnemy = Math.atan2(ey - cy, ex - cx);
+                          e.dx = Math.cos(angleToEnemy) * knockback;
+                          e.dy = Math.sin(angleToEnemy) * knockback - (isSpin ? 4 : 2); 
+                          
+                          if (owner instanceof Player) {
+                              context.camera.shake(isSpin ? 12 : 5);
+                              context.game.freezeFrames = isSpin ? 5 : 2;
+                          }
+                          const sparkColor = isSpin ? "#ffff00" : "#00f3ff";
+                          for(let i=0; i<6; i++) context.particles.emitExplosion(ex, ey, sparkColor);
+                      }
+                  }
+              });
           }
+          
           attack(context, owner) {
-              this.cooldownTimer = this.cooldownTime; this.swinging = true; this.swingTimer = this.swingDuration; this.hitList = [];
+              let lungeSpeed = 6; this.swingDuration = 10;
+              let arcSweep = 2.4; let color = "#00f3ff";
+
+              if (this.comboStep === 0) this.swingDir = 1;
+              else if (this.comboStep === 1) this.swingDir = -1;
+              else if (this.comboStep === 2) {
+                  this.swingDir = 1; lungeSpeed = 12; this.swingDuration = 16;
+                  arcSweep = Math.PI * 2; color = "#ffff00";
+              }
+
+              this.cooldownTimer = this.comboStep === 2 ? 30 : 12; this.comboTimer = 45;
+              this.isSwinging = true; this.swingTimer = this.swingDuration; this.hitList =[];
+
               const cx = owner.x + owner.width / 2; const cy = owner.y + owner.height / 2;
               let mx, my;
-              if(owner instanceof Player) {
-                mx = context.input.mouse.x + context.camera.x;
-                my = context.input.mouse.y + context.camera.y;
-              } else {
-                mx = context.game.player.x; my = context.game.player.y;
-              }
+              if (owner instanceof Player) { mx = context.input.mouse.x + context.camera.x; my = context.input.mouse.y + context.camera.y; } 
+              else { mx = context.game.player.x; my = context.game.player.y; }
               this.targetAngle = Math.atan2(my - cy, mx - cx);
-              this.swingDir = (mx >= cx) ? 1 : -1;
+
+              owner.dx += Math.cos(this.targetAngle) * lungeSpeed; owner.dy += Math.sin(this.targetAngle) * lungeSpeed;
+              if (owner instanceof Player && this.comboStep === 2) context.camera.shake(6);
+
+              this.slashEffects.push({
+                  angle: this.targetAngle, sweep: arcSweep, dir: this.swingDir, radius: this.hitboxRange,
+                  life: 12, maxLife: 12, color: color, isSpin: this.comboStep === 2
+              });
+
+              this.comboStep = (this.comboStep + 1) % 3;
           }
+          
           draw(ctx, owner, targetPoint) {
-              const cx = owner.x + owner.width/2; const cy = owner.y + owner.height/2;
+              const cx = owner.x + owner.width / 2; const cy = owner.y + owner.height / 2;
+              this.slashEffects.forEach(effect => {
+                  ctx.save(); ctx.translate(cx, cy); ctx.rotate(effect.angle);
+                  if (effect.dir < 0) ctx.scale(1, -1); 
+                  const progress = 1 - (effect.life / effect.maxLife);
+                  ctx.globalAlpha = effect.life / effect.maxLife;
+                  
+                  if (effect.isSpin) {
+                      ctx.beginPath(); ctx.arc(0, 0, effect.radius, 0, Math.PI * 2);
+                      ctx.lineWidth = 15 * (1 - progress); ctx.strokeStyle = effect.color; ctx.stroke();
+                      ctx.beginPath(); ctx.arc(0, 0, effect.radius * 0.7, 0, Math.PI * 2);
+                      ctx.lineWidth = 5 * (1 - progress); ctx.strokeStyle = "#ffffff"; ctx.stroke();
+                  } else {
+                      ctx.beginPath(); const startAng = -effect.sweep / 2; const endAng = effect.sweep / 2;
+                      ctx.arc(0, 0, effect.radius, startAng, endAng);
+                      ctx.lineWidth = 20 * (1 - progress); ctx.strokeStyle = effect.color; ctx.lineCap = "round"; ctx.stroke();
+                      ctx.beginPath(); ctx.arc(0, 0, effect.radius - 8, startAng, endAng);
+                      ctx.lineWidth = 6 * (1 - progress); ctx.strokeStyle = "#ffffff"; ctx.lineCap = "round"; ctx.stroke();
+                  }
+                  ctx.restore();
+              });
+
               let angle = 0;
-              if (this.swinging) {
+              if (this.isSwinging) {
                   const progress = 1 - (this.swingTimer / this.swingDuration);
-                  angle = Utils.lerp(this.targetAngle - 1.4 * this.swingDir, this.targetAngle + 1.4 * this.swingDir, progress);
+                  const isSpin = this.slashEffects.length > 0 && this.slashEffects[this.slashEffects.length-1].isSpin;
+                  if (isSpin) angle = this.targetAngle + (Math.PI * 4 * progress); 
+                  else angle = Utils.lerp(this.targetAngle - 1.4 * this.swingDir, this.targetAngle + 1.4 * this.swingDir, progress);
               } else {
                   const mx = targetPoint.x; const my = targetPoint.y;
                   angle = Math.atan2(my - cy, mx - cx);
               }
-              ctx.save(); ctx.translate(cx, cy); ctx.rotate(angle); ctx.translate(16, 0); ctx.rotate(Math.PI/2);
-              ctx.fillStyle = "#666"; ctx.fillRect(-4, 0, 8, 14);
-              ctx.fillStyle = "#888"; ctx.fillRect(-12, -6, 24, 6);
-              ctx.fillStyle = "#e0e0e0"; ctx.beginPath(); ctx.moveTo(-6, -6); ctx.lineTo(6, -6); ctx.lineTo(6, -this.bladeLength + 10); ctx.lineTo(0, -this.bladeLength); ctx.lineTo(-6, -this.bladeLength + 10); ctx.closePath(); ctx.fill();
+
+              ctx.save(); ctx.translate(cx, cy); ctx.rotate(angle);
+              
+              // Ensure the hilt/blade orient nicely if facing left
+              if (!this.isSwinging && Math.abs(angle) > Math.PI / 2) {
+                  ctx.scale(1, -1);
+              }
+
+              let forwardOffset = this.isSwinging ? 25 : 15;
+              ctx.translate(forwardOffset, 0);
+              
+              ctx.fillStyle = "#111"; ctx.fillRect(0, -3, 16, 6);
+              ctx.fillStyle = "#444"; ctx.fillRect(14, -8, 4, 16);
+              ctx.fillStyle = "#ccc";
+              ctx.beginPath(); ctx.moveTo(18, -2); ctx.lineTo(18 + this.hitboxRange * 0.8, -2);
+              ctx.lineTo(18 + this.hitboxRange * 0.8 + 10, 0); ctx.lineTo(18 + this.hitboxRange * 0.8, 2);
+              ctx.lineTo(18, 2); ctx.closePath(); ctx.fill();
+              
+              const glowColor = (this.comboStep === 2 && this.comboTimer > 0) ? "#ffff00" : "#00f3ff";
+              ctx.fillStyle = glowColor; ctx.shadowBlur = 10; ctx.shadowColor = glowColor;
+              ctx.beginPath(); ctx.moveTo(18, -2); ctx.lineTo(18 + this.hitboxRange * 0.8, -2);
+              ctx.lineTo(18 + this.hitboxRange * 0.8 + 10, 0); ctx.closePath(); ctx.fill();
               ctx.restore();
           }
       }
@@ -740,7 +620,8 @@
           this.wallJumpsMax = 3; this.wallJumps = 3; this.maxDashes = 1; this.dashes = 1;
           this.dashFrameTimer = 0; this.dashDir = { x: 0, y: 0 };
           this.coyoteTimer = 0; this.jumpBufferTimer = 0;
-          this.weapons = [new PelletGun(), new LongSword()];
+          
+          this.weapons =[new PelletGun(), new Shotgun(), new VoltKatana()];
           this.weaponIndex = 0; this.currentWeapon = this.weapons[0];
         }
 
@@ -753,17 +634,13 @@
           if (this.currentWeapon) this.currentWeapon.update(context, this);
         }
 
-        // NEW: Respawn Logic
         checkDeathAndRespawn(context) {
             if(this.health <= 0) {
-                // Effects
                 context.particles.emitExplosion(this.x + this.width/2, this.y + this.height/2, this.color);
                 context.camera.shake(10);
                 context.game.freezeFrames = 5;
-
-                // Reset
                 this.health = this.maxHealth;
-                this.x = 100; // Start Point
+                this.x = 100;
                 this.y = 900;
                 this.dx = 0; this.dy = 0;
                 this.isDashing = false;
@@ -773,7 +650,12 @@
 
         _handleInput(context) {
           const input = context.input;
-          if (input.isPressed("q")) { this.weaponIndex = (this.weaponIndex + 1) % this.weapons.length; this.currentWeapon = this.weapons[this.weaponIndex]; }
+          
+          if (input.isPressed("e") || input.isPressed("q")) { 
+              this.weaponIndex = (this.weaponIndex + 1) % this.weapons.length; 
+              this.currentWeapon = this.weapons[this.weaponIndex]; 
+          }
+          
           if (this.onGround) this.coyoteTimer = 6; else this.coyoteTimer--;
           if (input.isPressed("w")) this.jumpBufferTimer = 5; else this.jumpBufferTimer--;
           if (!input.isDown("w") && this.dy < -3 && !this.isDashing) this.dy *= Config.PHYSICS.JUMP_CUTOFF;
@@ -852,64 +734,39 @@
       class Enemy extends Actor {
         constructor(x, y) {
           super(x, y, 24, 24, Config.COLORS.ENEMY, 100);
-          this.hasEyes = true; this.eyeColor = Config.COLORS.ENEMY_EYES; this.showHealthBar = true; this.deathTimer = 0;
-          this.wallJumps = 999; this.dashes = 1;
-          this.dashFrameTimer = 0; this.dashDir = {x:0, y:0}; this.dashCooldown = 0;
-          this.ai = new EnemyAI(this);
-          this.moveInput = { a: false, d: false, w: false };
+          this.hasEyes = true; 
+          this.eyeColor = Config.COLORS.ENEMY_EYES; 
+          this.showHealthBar = true; 
+          this.deathTimer = 0;
         }
 
         takeDamage(amount) {
            if (this.isDead) return;
            super.takeDamage(amount);
            if (this.health <= 0) {
-               this.isDead = true; this.health = 0; this.color = Config.COLORS.ENEMY_DEAD;
-               this.deathTimer = 30; this.showHealthBar = false; this.hasEyes = false;
+               this.isDead = true; 
+               this.health = 0; 
+               this.color = Config.COLORS.ENEMY_DEAD;
+               this.deathTimer = 30; 
+               this.showHealthBar = false; 
+               this.hasEyes = false;
            }
-        }
-
-        shoot(context, angle) {
-            const speed = 10;
-            const bullet = new Bullet(this.x + this.width/2, this.y + this.height/2, Math.cos(angle)*speed, Math.sin(angle)*speed, false);
-            context.bulletManager.add(bullet);
-        }
-
-        dash(dx, dy, context) {
-            this.isDashing = true; this.dashes = 0; this.dashFrameTimer = Config.PHYSICS.DASH_DURATION;
-            this.dashDir = {x: dx, y: dy}; this.dx = dx * Config.PHYSICS.DASH_SPEED; this.dy = dy * Config.PHYSICS.DASH_SPEED;
-            this.dashCooldown = 60; context.particles.emitGhost(this.x, this.y, this.width, this.height, Config.COLORS.ENEMY_DASH);
         }
 
         update(context) {
           if (this.isDead) {
               this.dx = 0; this.dy = 0; this.deathTimer--;
-              if (this.deathTimer <= 0) { this.markedForDeletion = true; context.particles.emitExplosion(this.x + this.width/2, this.y + this.height/2, "#ff0000"); }
+              if (this.deathTimer <= 0) { 
+                  this.markedForDeletion = true; 
+                  context.particles.emitExplosion(this.x + this.width/2, this.y + this.height/2, "#ff0000"); 
+              }
               return;
           }
 
           this.updateAnimation();
-          this.moveInput = { a: false, d: false, w: false }; 
-          if(this.dashCooldown > 0) this.dashCooldown--; else if(this.onGround || this.onWall) this.dashes = 1;
-          this.ai.update(context);
-
-          if (this.isDashing) {
-              this.dashFrameTimer--;
-              this.dx = this.dashDir.x * Config.PHYSICS.DASH_SPEED; this.dy = this.dashDir.y * Config.PHYSICS.DASH_SPEED;
-              if (this.dashFrameTimer <= 0) { this.isDashing = false; this.dx *= 0.5; this.dy *= 0.5; }
-              context.physics.resolveCollisions(this);
-          } else {
-            if (this.moveInput.a) { this.dx -= Config.PHYSICS.ACCEL; this.facing = "left"; }
-            else if (this.moveInput.d) { this.dx += Config.PHYSICS.ACCEL; this.facing = "right"; }
-            else context.physics.applyFriction(this);
-
-            if (Math.abs(this.dx) > Config.PHYSICS.RUN_SPEED) this.dx = Math.sign(this.dx) * Config.PHYSICS.RUN_SPEED;
-            if(this.moveInput.w) {
-                if(this.onGround) this.dy = Config.PHYSICS.JUMP_POWER;
-                else if(this.onWall) { this.dy = Config.PHYSICS.JUMP_POWER; this.dx = this.onWall === "left" ? 6 : -6; }
-            }
-            context.physics.applyGravity(this);
-            context.physics.resolveCollisions(this);
-          }
+          context.physics.applyFriction(this);
+          context.physics.applyGravity(this);
+          context.physics.resolveCollisions(this);
         }
       }
 
@@ -921,7 +778,7 @@
       }
 
       class BulletManager {
-        constructor() { this.bullets = []; }
+        constructor() { this.bullets =[]; }
         add(bullet) { this.bullets.push(bullet); }
         update(context) {
           for (let i = this.bullets.length - 1; i >= 0; i--) {
@@ -957,7 +814,7 @@
       class Level {
         constructor() {
           const w = Config.WORLD.WIDTH; const h = Config.WORLD.HEIGHT;
-          this.platforms = [
+          this.platforms =[
             { x: -40, y: 0, width: 40, height: h }, { x: w, y: 0, width: 40, height: h },
             { x: 0, y: -40, width: w, height: 40 }, { x: 0, y: h - 40, width: w, height: 80 },
             { x: 0, y: 1000, width: 250, height: 20 }, { x: 250, y: 900, width: 20, height: 120 },
@@ -985,12 +842,12 @@
         }
         reset() {
           this.player = new Player();
-          this.enemies = [
+          this.enemies =[
               new Enemy(400, 900), new Enemy(600, 900), new Enemy(1200, 900),
               new Enemy(200, 700), new Enemy(900, 600), new Enemy(1100, 300),
               new Enemy(1600, 200), new Enemy(1800, 750)
           ];
-          this.bulletManager.bullets = [];
+          this.bulletManager.bullets =[];
           this.ui.init(this.player.wallJumpsMax, this.player.maxDashes);
         }
         get context() { return { input: this.input, camera: this.camera, particles: this.particles, level: this.level, physics: this.physics, bulletManager: this.bulletManager, game: this }; }
@@ -1001,8 +858,7 @@
           for (let i = this.enemies.length - 1; i >= 0; i--) { const e = this.enemies[i]; e.update(this.context); if(e.markedForDeletion) this.enemies.splice(i, 1); }
           this.bulletManager.update(this.context);
           
-          // NEW: Entity Collisions to prevent clumping
-          const allEntities = [this.player, ...this.enemies];
+          const allEntities =[this.player, ...this.enemies];
           this.physics.resolveEntitySeparation(allEntities);
 
           this.ui.update(this.player);
